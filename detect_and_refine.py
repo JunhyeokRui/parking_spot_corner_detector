@@ -217,8 +217,8 @@ def run(yolo_weight='yolov5s.pt',  # model.pt path(s)
 
 def parse_opt():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--yolo_weight', nargs='+', type=str, default='./runs/train/ABC_DE_F_batch_40_augmented_adam2/weights/last.pt', help='model.pt path(s)')
-    parser.add_argument('--refinement_weight', nargs='+', type=str, default='./refinement_network_weights/train_ABC_test_DE_no_aug_larger_safe_margin_imgsize_50/200_epoch_model.pth', help='model.pt path(s)')
+    parser.add_argument('--yolo_weight', nargs='+', type=str, default='./checkpoints/yolo_network/trained_on_ABC.pth', help='model.pt path(s)')
+    parser.add_argument('--refinement_weight', nargs='+', type=str, default='./checkpoints/refinement_network/trained_on_ABC.pth', help='model.pt path(s)')
     parser.add_argument('--source', type=str, default='data/images', help='file/dir/URL/glob, 0 for webcam')
     parser.add_argument('--imgsz', '--img', '--img-size', type=int, default=512, help='inference size (pixels)')
     parser.add_argument('--conf-thres', type=float, default=0.25, help='confidence threshold')
