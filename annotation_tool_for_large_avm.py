@@ -14,7 +14,7 @@ def on_EVENT_BUTTONDOWN(event, x, y, flags, param):
         b.append(y)
         c.append(0)
         cv2.circle(img, (x, y), 3, (0, 0, 255), thickness=-1)
-        cv2.rectangle(img, (x-30, y-30),(x+30,y+30),  (0, 0, 255), 2)
+        cv2.rectangle(img, (x-20, y-20),(x+20,y+20),  (0, 0, 255), 2)
         cv2.putText(img, xy, (x, y), cv2.FONT_HERSHEY_PLAIN,
                     1.0, (0, 0, 0), thickness=1)
         cv2.imshow("image", img)
@@ -26,7 +26,7 @@ def on_EVENT_BUTTONDOWN(event, x, y, flags, param):
         b.append(y)
         c.append(1)
         cv2.circle(img, (x, y), 3, (0, 255, 0), thickness=-1)
-        cv2.rectangle(img, (x-30, y-30),(x+30,y+30),  (0, 255, 0), 2)
+        cv2.rectangle(img, (x-20, y-20),(x+20,y+20),  (0, 255, 0), 2)
         cv2.putText(img, xy, (x, y), cv2.FONT_HERSHEY_PLAIN,
                     1.0, (0, 0, 0), thickness=1)
         cv2.imshow("image", img)
@@ -84,9 +84,9 @@ for images in tqdm(os.listdir(os.path.join(path,'images',trial))):
                 yolo_annotation = []
                 for i in range(len(a)):
                     if c[i]==0:
-                        yolo_annotation.append(np.array([[int(0),a[i]/900,b[i]/900,60/900,60/900]]))
+                        yolo_annotation.append(np.array([[int(0),a[i]/900,b[i]/900,40/900,40/900]]))
                     elif c[i]==1:
-                        yolo_annotation.append(np.array([[int(1),a[i]/900,b[i]/900,60/900,60/900]]))
+                        yolo_annotation.append(np.array([[int(1),a[i]/900,b[i]/900,40/900,40/900]]))
                 yolo_annotation = np.concatenate(yolo_annotation,0)
                 print(yolo_annotation)
 
