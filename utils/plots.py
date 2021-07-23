@@ -82,10 +82,12 @@ def plot_one_box(x, im, color=(128, 128, 128), label=None, line_thickness=3):
     assert im.data.contiguous, 'Image not contiguous. Apply np.ascontiguousarray(im) to plot_on_box() input image.'
     tl = line_thickness or round(0.002 * (im.shape[0] + im.shape[1]) / 2) + 1  # line/font thickness
     c1, c2 = (int(x[0]), int(x[1])), (int(x[2]), int(x[3]))
+    center = (int((int(x[0])+int(x[2]))/2), int((int(x[1])+int(x[3]))/2))
     # im = T.ToPILImage()(im.squeeze())
     # print('here I am!')
     # print(im.shape)
-    cv2.rectangle(im, c1, c2, color, thickness=tl, lineType=cv2.LINE_AA)
+    # cv2.rectangle(im, c1, c2, color, thickness=tl, lineType=cv2.LINE_AA)
+    cv2.circle(im, center, 2, color,thickness = 2, lineType = -1)
     if label:
         tf = max(tl - 1, 1)  # font thickness
         t_size = cv2.getTextSize(label, 0, fontScale=tl / 3, thickness=tf)[0]
