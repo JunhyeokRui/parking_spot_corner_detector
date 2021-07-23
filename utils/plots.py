@@ -94,7 +94,7 @@ def plot_one_box(x, im, color=(128, 128, 128), label=None, line_thickness=3):
         # cv2.putText(im, label, (c1[0], c1[1] - 2), 0, tl / 3, [225, 255, 255], thickness=tf, lineType=cv2.LINE_AA)
 
 
-def plot_exact_point(refinement_model, x, im, color=(128, 0, 128), label=None, line_thickness=3):
+def plot_exact_point(resize, refinement_model, x, im, color=(128, 0, 128), label=None, line_thickness=3, refinement=True):
     # for box_idx in range(n):
                     # print(img.shape)
                     # temp_pil = T.ToPILImage()(img.squeeze())
@@ -116,14 +116,17 @@ def plot_exact_point(refinement_model, x, im, color=(128, 0, 128), label=None, l
     # temp_cropped = img[:,3,int(det[box_idx,0].cpu().item()):int(det[box_idx,1].cpu().item())]
     # print(temp_cropped_to_tensor.shape)
     # temp_cropped_to_tensor_resize = T.Resize([80,80])(temp_cropped_to_tensor)
-    transform = T.Compose([T.ToTensor(),T.Resize([50,50])])
+    transform = T.Compose([T.ToTensor(),T.Resize([resize,resize])])
     cropped_tensor = transform(PIL_im_crop).unsqueeze(0)
     # print(cropped_tensor.shape)
 
     refinement_model.eval()
     
     with torch.no_grad():
-        refinement_output = refinement_model(cropped_tensor.cuda())
+        if refinement:
+            refinement_output = refinement_model(cropped_tensor.cuda())
+        else:
+            refinement_output = torch.Tensor([[0.5,0.5]])
         # print(refinement_output)
         refinement_output = crop_size*refinement_output[0].cpu()
         refinement_output = np.array(list(map(int,refinement_output)))

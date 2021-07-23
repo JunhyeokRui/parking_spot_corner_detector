@@ -13,11 +13,12 @@ from rospy.numpy_msg import numpy_msg
 from rospy_tutorials.msg import Floats
 from std_msgs.msg import Int32, String
 
-
+import time
 import argparse
 import sys
 import time
 from pathlib import Path
+import os
 
 import cv2
 import torch
@@ -47,6 +48,7 @@ class yolo_for_ros():
             conf_thres,  # confidence threshold
             iou_thres,  # NMS IOU threshold
             max_det,  # maximum detections per image
+            resize, 
             device,  # cuda device, i.e. 0 or 0,1,2,3 or cpu
             view_img,  # show results
             save_txt,  # save results to *.txt
@@ -64,7 +66,8 @@ class yolo_for_ros():
             line_thickness,  # bounding box thickness (pixels)
             hide_labels,  # hide labels
             hide_conf,  # hide confidences
-            half):
+            half,
+            refinement):
 
         self.img = None
         self.yolo_weight = yolo_weight
@@ -92,6 +95,8 @@ class yolo_for_ros():
         self.hide_labels = hide_labels 
         self.hide_conf = hide_conf 
         self.half = half 
+        self.resize = resize
+        self.refinement = refinement
 
         print('loading yolo model from {}'.format(yolo_weight))
         # print(yolo_weight)
@@ -102,21 +107,23 @@ class yolo_for_ros():
         self.model = self.model.cuda()
 
         # Load refinement model
-        print('loading refinement model from {}'.format(refinement_weight))
+        print('loading refinement model from {}'.format(os.path.join('./refinement_network_weights',refinement_weight)))
         self.refinement_model = resnet18()
         self.refinement_model.fc = nn.Sequential(nn.Linear(512,2),nn.Sigmoid())
-        refinement_state = torch.load(refinement_weight)
+        refinement_state = torch.load(os.path.join('./refinement_network_weights',refinement_weight))
         self.refinement_model.load_state_dict(refinement_state)
         self.refinement_model = self.refinement_model.cuda()
+        print('MODEL ALL LOADED!!')
 
 
         self.pub = rospy.Publisher('/exact_corner_points', String, queue_size=10)
  
-    def image_callback(self, msg):
+    def image_front_callback(self, msg):
         # print("Received an image!")
         # try:
             # Convert your ROS Image message to OpenCV2
         # print(msg)
+        t0 = time.time()
         self.img = np.frombuffer(msg.data, dtype=np.uint8).reshape(msg.height, msg.width, -1)
         # print(x.shape)
         # print('none1')
@@ -144,8 +151,46 @@ class yolo_for_ros():
             line_thickness=self.line_thickness,  # bounding box thickness (pixels)
             hide_labels=self.hide_labels,  # hide labels
             hide_conf=self.hide_conf,  # hide confidences
-            half=self.half)
-        
+            half=self.half,
+            refinement = self.refinement, 
+            img_name = 'front')
+
+    def image_rear_callback(self, msg):
+        # print("Received an image!")
+        # try:
+            # Convert your ROS Image message to OpenCV2
+        # print(msg)
+        t0 = time.time()
+        self.img = np.frombuffer(msg.data, dtype=np.uint8).reshape(msg.height, msg.width, -1)
+        # print(x.shape)
+        # print('none1')
+        self.run(input_img = self.img, yolo_weight = self.yolo_weight,  # model.pt path(s)
+            refinement_weight = self.refinement_weight,
+            source = self.source,  # file/dir/URL/glob, 0 for webcam
+            imgsz = self.imgsz,  # inference size (pixels)
+            conf_thres = self.conf_thres,  # confidence threshold
+            iou_thres = self.iou_thres,  # NMS IOU threshold
+            max_det = self.max_det,  # maximum detections per image
+            device = self.device,  # cuda device, i.e. 0 or 0,1,2,3 or cpu
+            view_img = self.view_img,  # show results
+            save_txt = self.save_txt,  # save results to *.txt
+            save_conf=self.save_conf,  # save confidences in --save-txt labels
+            save_crop=self.save_crop,  # save cropped prediction boxes
+            nosave=self.nosave,  # do not save images/videos
+            classes=self.classes,  # filter by class: --class 0, or --class 0 2 3
+            agnostic_nms=self.agnostic_nms,  # class-agnostic NMS
+            augment=self.augment,  # augmented inference
+            visualize=self.visualize,  # visualize features
+            update=self.update,  # update all models
+            project=self.project,  # save results to project/name
+            name=self.name,  # save results to project/name
+            exist_ok=self.exist_ok,  # existing project/name ok, do not increment
+            line_thickness=self.line_thickness,  # bounding box thickness (pixels)
+            hide_labels=self.hide_labels,  # hide labels
+            hide_conf=self.hide_conf,  # hide confidences
+            half=self.half,
+            refinement = self.refinement,
+            img_name = 'rear')        
 
     @torch.no_grad()
     def run(self, input_img, yolo_weight='yolov5s.pt',  # model.pt path(s)
@@ -155,6 +200,7 @@ class yolo_for_ros():
             conf_thres=0.25,  # confidence threshold
             iou_thres=0.45,  # NMS IOU threshold
             max_det=1000,  # maximum detections per image
+            resize = 50, 
             device='',  # cuda device, i.e. 0 or 0,1,2,3 or cpu
             view_img=False,  # show results
             save_txt=False,  # save results to *.txt
@@ -172,7 +218,9 @@ class yolo_for_ros():
             line_thickness=3,  # bounding box thickness (pixels)
             hide_labels=False,  # hide labels
             hide_conf=False,  # hide confidences
-            half=False):
+            half=False,
+            refinement = False,
+            img_name = 'rear'):
 
         # rospy.init_node('image_listener')
         # # imgsaver=image_saver()
@@ -295,7 +343,7 @@ class yolo_for_ros():
                     # print('here')
                     # print(xyxy)
                     plot_one_box(xyxy, im0, label=label, color=colors(c, True), line_thickness=line_thickness)
-                    refine_estimation = plot_exact_point(self.refinement_model,xyxy, im0, label=label, color=colors(c, True), line_thickness=line_thickness)
+                    refine_estimation = plot_exact_point(self.resize, self.refinement_model,xyxy, im0, label=label, color=colors(c, True), line_thickness=line_thickness, refinement=self.refinement)
                     refine_estimations.append(refine_estimation)
                 refine_estimations = np.concatenate(refine_estimations,0)
                 refine_estimations = ','.join(map(str,refine_estimations))
@@ -311,7 +359,11 @@ class yolo_for_ros():
 
             # Stream results
             if view_img:
-                cv2.imshow('yolo_and_refine',im0)
+                if self.refinement :
+                    name = "YOLO with Refinement ({})".format(img_name)
+                else:
+                    name = "YOLO only ({})".format(img_name)
+                cv2.imshow(name,im0)
                 cv2.waitKey(1)  # 1 millisecond
 
             # Save results (image with detections)
@@ -342,24 +394,31 @@ class yolo_for_ros():
 
         # print(f'Done. ({time.time() - t0:.3f}s)')
 
+        t1 = time.time()
+
+        print('time per detection : {:.5f}'.format(t1-t0))
+
     def listener(self):
         rospy.init_node('yolo_detector')
         # Define your image topic
         # Set up your subscriber and define its callback
-        rospy.Subscriber("/fisheye_raw_rear", Image, self.image_callback)
+        rospy.Subscriber("/fisheye_raw_rear", Image, self.image_rear_callback)
+        # rospy.Subscriber("/fisheye_raw_center", Image, self.image_front_callback)
+        # rospy.Subscriber("/fisheye_raw_front", Image, self.image_callback)
         # rospy.Publisher()
         rospy.spin()
 
 
 def parse_opt():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--yolo_weight', nargs='+', type=str, default='./runs/train/DEF_AB_C_batch_40_augmented_adam/weights/last.pt', help='model.pt path(s)')
-    parser.add_argument('--refinement_weight', nargs='+', type=str, default='./refinement_network_weights/train_DEF_test_AB_no_aug_larger_safe_margin_imgsize_50/200_epoch_model.pth', help='model.pt path(s)')
+    parser.add_argument('--yolo_weight', nargs='+', type=str, default='./runs/train/ABC_DE_F_batch_40_augmented_adam2/weights/last.pt', help='model.pt path(s)')
+    parser.add_argument('--refinement_weight', nargs='+', type=str, default='train_ABC_resize_80_crop_45_55_20_resnet18/200_epoch_model.pth', help='model.pt path(s)')
     parser.add_argument('--source', type=str, default='data/images', help='file/dir/URL/glob, 0 for webcam')
     parser.add_argument('--imgsz', '--img', '--img-size', type=int, default=512, help='inference size (pixels)')
-    parser.add_argument('--conf-thres', type=float, default=0.25, help='confidence threshold')
+    parser.add_argument('--conf-thres', type=float, default=0.1, help='confidence threshold')
     parser.add_argument('--iou-thres', type=float, default=0.45, help='NMS IoU threshold')
     parser.add_argument('--max-det', type=int, default=1000, help='maximum detections per image')
+    parser.add_argument('--resize', type=int, default=50, help='maximum detections per image')
     parser.add_argument('--device', default='cuda:0', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
     parser.add_argument('--view-img', action='store_true', help='show results')
     parser.add_argument('--save-txt', action='store_true', help='save results to *.txt')
@@ -378,6 +437,7 @@ def parse_opt():
     parser.add_argument('--hide-labels', default=False, action='store_true', help='hide labels')
     parser.add_argument('--hide-conf', default=False, action='store_true', help='hide confidences')
     parser.add_argument('--half', action='store_true', help='use FP16 half-precision inference')
+    parser.add_argument('--refinement', action='store_true', help='use FP16 half-precision inference')
     opt = parser.parse_args()
     return opt
 

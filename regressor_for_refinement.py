@@ -23,6 +23,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Circle, Rectangle
 import matplotlib.ticker as plticker
+import io
 
  
 # from utils import Bar, Logger, AverageMeter, accuracy, mkdir_p, savefig
@@ -47,9 +48,6 @@ parser.add_argument('--lr', '--learning-rate', default=0.01, type=float,
                     metavar='LR', help='initial learning rate')
 parser.add_argument('--drop', '--dropout', default=0, type=float,
                     metavar='Dropout', help='Dropout ratio')
-parser.add_argument('--n_class', default=2, type=int)
-parser.add_argument('--schedule', type=int, nargs='+', default=[150, 225],
-                        help='Decrease learning rate at these epochs.')
 parser.add_argument('--gamma', type=float, default=0.1, help='LR is multiplied by gamma on schedule.')
 parser.add_argument('--momentum', default=0.9, type=float, metavar='M',
                     help='momentum')
@@ -58,6 +56,8 @@ parser.add_argument('--weight-decay', '--wd', default=5e-4, type=float,
 parser.add_argument('--train_trials', required=True, type=str)
 parser.add_argument('--test_trials', required=True, type=str)
 parser.add_argument('--run', required=True, type=str)
+parser.add_argument('--crop_name', required=True, type=str)
+parser.add_argument('--resize', required=True, type=int)
 
 args = parser.parse_args()
 
@@ -72,13 +72,13 @@ use_cuda = torch.cuda.is_available()
 # if use_cuda:
 #     torch.cuda.manual_seed_all(args.manualSeed)
 
-writer = SummaryWriter('./runs/{}'.format(args.run))
+writer = SummaryWriter('./refinement_network_weights/{}'.format(args.run))
 
 
 class cropped_dataset(Dataset):
     """Face Landmarks dataset."""
 
-    def __init__(self, trials_to_select, transform=None):
+    def __init__(self, trials_to_select, crop_name, transform=None):
         """
         Args:
             csv_file (string): Path to the csv file with annotations.
@@ -86,8 +86,8 @@ class cropped_dataset(Dataset):
             transform (callable, optional): Optional transform to be applied
                 on a sample.
         """
-        self.data_dir = os.path.join('../refinement_data','images')
-        self.label_dir = os.path.join('../refinement_data','ratio_labels')
+        self.data_dir = os.path.join('../refinement_data','images_{}'.format(crop_name))
+        self.label_dir = os.path.join('../refinement_data','ratio_labels_{}'.format(crop_name))
         self.transform = transform
         self.image_list = []
         self.label_list = []
@@ -147,11 +147,12 @@ def main():
     # Data
     # print('==> Preparing dataset %s' % args.dataset)
 
+
     transform_train = transforms.Compose([
         # transforms.RandomCrop(32, padding=4),
         # transforms.RandomApply(transforms.ColorJitter(brightness=.5, hue=.3),p=0.5),
         # transforms.ColorJitter(saturation=(0,0.2),hue=(-0.1,0.1)),
-        transforms.Resize([50,50]),
+        transforms.Resize([args.resize,args.resize]),
         transforms.ToTensor(),
         # transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
     ])
@@ -159,7 +160,7 @@ def main():
     transform_test = transforms.Compose([
         # transforms.RandomCrop(32, padding=4),
         # transforms.RandomApply(transforms.ColorJitter(brightness=.5, hue=.3),p=0.5),
-        transforms.Resize([50,50]),
+        transforms.Resize([args.resize,args.resize]),
         transforms.ToTensor(),
         # transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
     ])
@@ -168,9 +169,9 @@ def main():
     test_trials = args.test_trials.split(',')
 
 
-    trainset = cropped_dataset(train_trials ,transform_train)
+    trainset = cropped_dataset(train_trials , args.crop_name, transform_train)
     trainloader = data.DataLoader(trainset, batch_size=args.train_batch, shuffle=True, num_workers=args.workers)
-    testset = cropped_dataset(test_trials ,transform_test)
+    testset = cropped_dataset(test_trials ,args.crop_name, transform_test)
     testloader = data.DataLoader(testset, batch_size=args.train_batch, shuffle=False, num_workers=args.workers)
 
     print(len(trainset))
@@ -319,8 +320,17 @@ def test_output_sample_images(testloader, model, criterion, epoch, use_cuda):
         total += 1
     avg_loss = t_loss / total
 
-    for i in range(10):
 
+    for i in range(5,50,5):
+
+        # plt.figure()
+        # plt.plot([1, 2])
+        # plt.title("test")
+        buf = io.BytesIO()
+        # plt.savefig(buf, format='jpeg')
+        # buf.seek(0)
+        # # return buf
+        
         sample_img = inputs[i,:].squeeze()
         sample_img = transforms.ToPILImage()(sample_img)
         
@@ -330,18 +340,21 @@ def test_output_sample_images(testloader, model, criterion, epoch, use_cuda):
 
         # Show the image
         ax.imshow(sample_img)#.transpose(0,2).transpose(0,1))
-        circ = Circle((int(outputs[i][0]*50),int(outputs[i][0]*50)),4,color='b')
+        circ = Circle((int(outputs[i][0]*args.resize),int(outputs[i][1]*args.resize)),4,color='b')
         ax.add_patch(circ)
 
-        filepath = os.path.join('refinement_network_weights',args.run,'test_at_epoch_{}'.format(epoch))
-        os.makedirs(filepath,exist_ok = True)
+        # filepath = os.path.join('refinement_network_weights',args.run,'test_image_samples','at_epoch_{}'.format(epoch))
+        # os.makedirs(filepath,exist_ok = True)
 
-        plt.savefig(os.path.join(filepath,'sample_test_output_{}.png'.format(i)))
+        # plt.savefig(os.path.join(filepath,'sample_test_output_{}.png'.format(i)))
+        plt.savefig(buf, format='jpeg')
+        buf.seek(0)
         plt.close()
 
+        PIL_buf = Image.open(buf)
+        image_buf = transforms.ToTensor()(PIL_buf)
 
-
-
+        writer.add_image('Sample_Image/num_{}'.format(i), image_buf, epoch)
 
     return avg_loss
 
