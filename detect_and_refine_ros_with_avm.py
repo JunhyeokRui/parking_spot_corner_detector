@@ -116,9 +116,9 @@ class yolo_for_ros():
         print('MODEL ALL LOADED!!')
 
 
-        self.pub = rospy.Publisher('/exact_corner_points_on_avm', String, queue_size=10)
+        self.pub = rospy.Publisher('/exact_corner_points_on_AVM', String, queue_size=10)
  
-    def image_front_callback(self, msg):
+    def image_callback(self, msg):
         # print("Received an image!")
         # try:
             # Convert your ROS Image message to OpenCV2
@@ -152,45 +152,7 @@ class yolo_for_ros():
             hide_labels=self.hide_labels,  # hide labels
             hide_conf=self.hide_conf,  # hide confidences
             half=self.half,
-            refinement = self.refinement, 
-            img_name = 'front')
-
-    def image_rear_callback(self, msg):
-        # print("Received an image!")
-        # try:
-            # Convert your ROS Image message to OpenCV2
-        # print(msg)
-        t0 = time.time()
-        self.img = np.frombuffer(msg.data, dtype=np.uint8).reshape(msg.height, msg.width, -1)
-        # print(x.shape)
-        # print('none1')
-        self.run(input_img = self.img, yolo_weight = self.yolo_weight,  # model.pt path(s)
-            refinement_weight = self.refinement_weight,
-            source = self.source,  # file/dir/URL/glob, 0 for webcam
-            imgsz = self.imgsz,  # inference size (pixels)
-            conf_thres = self.conf_thres,  # confidence threshold
-            iou_thres = self.iou_thres,  # NMS IOU threshold
-            max_det = self.max_det,  # maximum detections per image
-            device = self.device,  # cuda device, i.e. 0 or 0,1,2,3 or cpu
-            view_img = self.view_img,  # show results
-            save_txt = self.save_txt,  # save results to *.txt
-            save_conf=self.save_conf,  # save confidences in --save-txt labels
-            save_crop=self.save_crop,  # save cropped prediction boxes
-            nosave=self.nosave,  # do not save images/videos
-            classes=self.classes,  # filter by class: --class 0, or --class 0 2 3
-            agnostic_nms=self.agnostic_nms,  # class-agnostic NMS
-            augment=self.augment,  # augmented inference
-            visualize=self.visualize,  # visualize features
-            update=self.update,  # update all models
-            project=self.project,  # save results to project/name
-            name=self.name,  # save results to project/name
-            exist_ok=self.exist_ok,  # existing project/name ok, do not increment
-            line_thickness=self.line_thickness,  # bounding box thickness (pixels)
-            hide_labels=self.hide_labels,  # hide labels
-            hide_conf=self.hide_conf,  # hide confidences
-            half=self.half,
-            refinement = self.refinement,
-            img_name = 'rear')        
+            refinement = self.refinement)
 
     @torch.no_grad()
     def run(self, input_img, yolo_weight='yolov5s.pt',  # model.pt path(s)
@@ -219,8 +181,7 @@ class yolo_for_ros():
             hide_labels=False,  # hide labels
             hide_conf=False,  # hide confidences
             half=False,
-            refinement = False,
-            img_name = 'rear'):
+            refinement = False):
 
         # rospy.init_node('image_listener')
         # # imgsaver=image_saver()
@@ -251,7 +212,7 @@ class yolo_for_ros():
         # Load model
 
         # Second-stage classifier
-        # classify = False
+        # classify = True
         # if classify:
         #     modelc = load_classifier(name='resnet50', n=2)  # initialize
         #     modelc.load_state_dict(torch.load('resnet50.pt', map_location=device)['model']).to(device).eval()
@@ -282,7 +243,11 @@ class yolo_for_ros():
         if img.ndimension() == 3:
             img = img.unsqueeze(0)
         img = img.cuda()
+        img = T.Resize(imgsz)(img)
+        # print(img.shape)
 
+        
+        # print(img.shape)
         # Inference
         t1 = time_synchronized()
         pred = self.model(img,
@@ -296,7 +261,7 @@ class yolo_for_ros():
 
         # Apply Classifier
         # if classify:
-        #     pred = apply_classifier(pred, modelc, img, im0s)
+        #     pred = apply_classifier(pred, modelc, img, im0)
 
         # Process detections
         for i, det in enumerate(pred):  # detections per image
@@ -320,8 +285,8 @@ class yolo_for_ros():
                 # print('after_resizing\n')
                 # print(det)
                 # Print results
-                # for c in det[:, -1].unique():
-                #     n = (det[:, -1] == c).sum()  # detections per class
+                for c in det[:, -1].unique():
+                    n = (det[:, -1] == c).sum()  # detections per class
                     # s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
 
                 # refined_pixel_estimations = []
@@ -329,6 +294,7 @@ class yolo_for_ros():
                 
                 # Write results
                 refine_estimations = []
+                class_estimations = []
                 for *xyxy, conf, cls in reversed(det):
                     # print(xyxy)
                     if save_txt:  # Write to file
@@ -342,9 +308,11 @@ class yolo_for_ros():
                     label = None if hide_labels else (self.names[c] if hide_conf else f'{self.names[c]} {conf:.2f}')
                     # print('here')
                     # print(xyxy)
-                    plot_one_box(xyxy, im0, label=label, color=colors(c, True), line_thickness=line_thickness)
-                    refine_estimation = plot_exact_point(self.resize, self.refinement_model,xyxy, im0, label=label, color=colors(c, True), line_thickness=line_thickness, refinement=self.refinement)
-                    refine_estimations.append(refine_estimation)
+                    center_point = plot_one_box(xyxy, im0, label=label, color=colors(c, True), line_thickness=line_thickness)
+                    # refine_estimation = plot_exact_point(self.resize, self.refinement_model,xyxy, im0, label=label, color=colors(c, True), line_thickness=line_thickness, refinement=self.refinement)
+                    refine_estimations.append(np.array([c,center_point[0],center_point[1]]))
+                    # class_estimations.append(c)
+                    # print(center_point)
                 refine_estimations = np.concatenate(refine_estimations,0)
                 refine_estimations = ','.join(map(str,refine_estimations))
                 self.pub.publish(refine_estimations)
@@ -360,9 +328,9 @@ class yolo_for_ros():
             # Stream results
             if view_img:
                 if self.refinement :
-                    name = "YOLO with Refinement ({})".format(img_name)
+                    name = "YOLO with Refinement"
                 else:
-                    name = "YOLO only ({})".format(img_name)
+                    name = "YOLO only"
                 cv2.imshow(name,im0)
                 cv2.waitKey(1)  # 1 millisecond
 
@@ -402,7 +370,7 @@ class yolo_for_ros():
         rospy.init_node('yolo_detector')
         # Define your image topic
         # Set up your subscriber and define its callback
-        rospy.Subscriber("/fisheye_raw_rear", Image, self.image_rear_callback)
+        rospy.Subscriber("/AVM_center_image", Image, self.image_callback)
         # rospy.Subscriber("/fisheye_raw_center", Image, self.image_front_callback)
         # rospy.Subscriber("/fisheye_raw_front", Image, self.image_callback)
         # rospy.Publisher()
@@ -411,11 +379,11 @@ class yolo_for_ros():
 
 def parse_opt():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--yolo_weight', nargs='+', type=str, default='./runs/train/ABC_DE_F_batch_40_augmented_adam2/weights/last.pt', help='model.pt path(s)')
+    parser.add_argument('--yolo_weight', nargs='+', type=str, default='./runs/train/avm_train_on_ABC/weights/last.pt', help='model.pt path(s)')
     parser.add_argument('--refinement_weight', nargs='+', type=str, default='train_ABC_resize_80_crop_45_55_20_resnet18/200_epoch_model.pth', help='model.pt path(s)')
     parser.add_argument('--source', type=str, default='data/images', help='file/dir/URL/glob, 0 for webcam')
     parser.add_argument('--imgsz', '--img', '--img-size', type=int, default=512, help='inference size (pixels)')
-    parser.add_argument('--conf-thres', type=float, default=0.1, help='confidence threshold')
+    parser.add_argument('--conf-thres', type=float, default=0.2, help='confidence threshold')
     parser.add_argument('--iou-thres', type=float, default=0.45, help='NMS IoU threshold')
     parser.add_argument('--max-det', type=int, default=1000, help='maximum detections per image')
     parser.add_argument('--resize', type=int, default=50, help='maximum detections per image')
@@ -433,7 +401,7 @@ def parse_opt():
     parser.add_argument('--project', default='runs/detect', help='save results to project/name')
     parser.add_argument('--name', default='exp', help='save results to project/name')
     parser.add_argument('--exist-ok', action='store_true', help='existing project/name ok, do not increment')
-    parser.add_argument('--line-thickness', default=3, type=int, help='bounding box thickness (pixels)')
+    parser.add_argument('--line-thickness', default=1, type=int, help='bounding box thickness (pixels)')
     parser.add_argument('--hide-labels', default=False, action='store_true', help='hide labels')
     parser.add_argument('--hide-conf', default=False, action='store_true', help='hide confidences')
     parser.add_argument('--half', action='store_true', help='use FP16 half-precision inference')

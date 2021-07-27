@@ -85,7 +85,7 @@ def run(yolo_weight='yolov5s.pt',  # model.pt path(s)
     refinement_model = refinement_model.cuda()
 
     # Second-stage classifier
-    classify = False
+    classify = True
     if classify:
         modelc = load_classifier(name='resnet50', n=2)  # initialize
         modelc.load_state_dict(torch.load('resnet50.pt', map_location=device)['model']).to(device).eval()
