@@ -132,3 +132,4 @@ dmypy.json
 refinement_network_weights/
 runs/
 data/
+angle_estimator_weights/

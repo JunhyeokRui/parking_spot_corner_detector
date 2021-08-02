@@ -42,7 +42,7 @@ import numpy as np
 bridge = CvBridge()
 
 class after_corner_detection():
-    def __init__(self):
+    def __init__(self, hough, pad, dot_threshold,  dist_threshold, max_line, max_dist):
         
         self.corner_points = None
         self.pub_exact_box_position = rospy.Publisher('/exact_box_position', String, queue_size=10)
@@ -52,6 +52,28 @@ class after_corner_detection():
             'inside':1,
             'middle':2,
         }
+        self.max_line = max_line
+        self.dot_threshold = dot_threshold
+        self.dist_threshold = dist_threshold
+        self.pad = pad
+        self.max_dist = max_dist
+
+    def make_binary_img(self, img):
+        new_img = img.copy()
+        for i in range(img.shape[0]):
+            for j in range(img.shape[1]):
+                if img[i,j,0]<105 or img[i,j,1]>125 or img[i,j,2]<150:
+                    new_img[i,j,0]=0
+                    new_img[i,j,1]=0
+                    new_img[i,j,2]=0
+                else:
+                    new_img[i,j,0]=255
+                    new_img[i,j,1]=255
+                    new_img[i,j,2]=255
+
+        gray_img = cv2.cvtColor(new_img, cv2.COLOR_BGR2GRAY)
+        return gray_img, new_img
+
 
     def length_between_points(self,point1,point2):
         return np.linalg.norm(point1 - point2)**2
@@ -103,6 +125,94 @@ class after_corner_detection():
 
         return angle
 
+    def orth_angle_calc_with_hough(self,angle, direction, corner, hough, name):
+        if hough:
+            temp = self.img[corner[1]-self.pad: corner[1]+self.pad, corner[0]-self.pad: corner[0]+self.pad]
+
+            # img_canny = cv2.Canny(temp, 50,100)
+            gray_binary, color_binary = self.make_binary_img(temp)
+            cv2.imshow("binary image around {}".format(name),color_binary)
+            img_canny = cv2.Canny(color_binary, 50,100)
+            # cv2.imshow("canny image around {}".format(name),img_canny)
+            lines = cv2.HoughLinesP(img_canny, 1,np.pi/360,5, np.array([]), self.max_line, self.max_dist)
+            if lines is not None:
+                # contrast_img.save(os.path.join(new_path,this_class, '{}_high_contrast.jpeg'.format(this_image[:-5])))
+                print_img = temp.copy()
+                points = []
+                angles = []
+                distances = []
+                dot_products = []
+                for line in lines:
+                    for x1, y1, x2, y2 in line:
+                        points.append(((x1 + 0.0, y1 + 0.0), (x2 + 0.0, y2 + 0.0)))
+                        cv2.line(print_img, (x1, y1), (x2, y2), (255, 0, 0), 1)
+                        orig_vec = np.array([np.cos(angle),np.sin(angle)])
+                        this_angle = self.angle_between_points(np.array([x1,y1]),np.array([x2,y2]))
+                        orth_vec = np.array([np.cos(this_angle), np.sin(this_angle)])
+                        prod = np.abs(np.matmul(orth_vec, orig_vec))
+                        dot_products.append(prod)
+                        angles.append(this_angle)
+                        distances.append(min(self.length_between_points(np.array([x1,y1]), np.array([temp.shape[0]//2,temp.shape[1]//2]) ),self.length_between_points(np.array([x2,y2]), np.array([temp.shape[0]//2,temp.shape[1]//2]) )))
+
+                dot_products = np.array(dot_products)
+                angles = np.array(angles)
+                distances = np.array(distances)
+                cv2.imshow("hough lines around {}".format(name),print_img)
+                # dot_thresholding = lambda x: 10e6 if x>self.dot_threshold else x
+                # distance_thresholding = lambda x: 10e6 if x>self.dist_threshold else x
+
+                # print(dot_products)
+                # dot_products = np.array(list(map(dot_thresholding, dot_products)))
+                # print(dot_products)
+                # distances = np.array(list(map(distance_thresholding,distances)))
+                
+                # print(dot_products)
+                index = np.argmin(1*dot_products + 0.01*distances)
+                print(dot_products[index])
+                print(distances[index])
+                if dot_products[index] < self.dot_threshold and distances[index] <self.dist_threshold:
+                # selected_angle = None
+                # for jj, hough_angle in enumerate(angles):
+
+                    # if np.abs(np.matmul(orth_vec, orig_vec))<self.dot_threshold and distances[jj] < self.dist_threshold :
+                    selected_angle = angles[index]
+                else:
+                    selected_angle = None
+
+                if selected_angle is not None:
+                    # print(min_matmul)
+                    orth_angle = selected_angle
+                    print("{}: HOUGH SLOPE IS USED!!\n".format(name))
+                    # print(lines)
+                    # print(final_index)
+                    # print((lines[final_index][0]))
+                    # cv2.line(print_img, (lines[final_index][0][0],lines[final_index][0][1]), (lines[final_index][0][2], lines[final_index][0][3]), (255, 255, 0), 10)
+                else:
+                    print("{}: There are no hough lines that are orthogonal enough. Assuming Strictly Orthogonal Relationship!\n".format(name))
+                    orth_angle = angle + np.pi/2
+            else:
+                print("{}: No hough lines are found. Assuming Strictly Orthogonal Relationship!\n".format(name))
+                orth_angle = angle + np.pi/2
+
+
+        else:
+            orth_angle = angle + np.pi/2
+
+        if direction == 'up':
+            if np.sin(orth_angle)<0:
+                orth_angle = orth_angle - np.pi
+        elif direction == 'down':
+            if np.sin(orth_angle)>0:
+                orth_angle = orth_angle - np.pi
+        elif direction == 'left':
+            if np.cos(orth_angle)<0:
+                orth_angle = orth_angle - np.pi
+        elif direction == 'right':
+            if np.cos(orth_angle)>0:
+                orth_angle = orth_angle - np.pi
+
+        return orth_angle
+
 
     def orth_opposite_point_calc(self, point1, point2, orth_angle, length = 95):
         orth_unit_vec = np.array([np.cos(orth_angle), np.sin(orth_angle)])
@@ -128,7 +238,7 @@ class after_corner_detection():
         # t1 = time.time()
 
         # print('time per detection : {:.5f}'.format(t1-t0))
-
+        circle_img = self.img.copy()
         blank_image = np.zeros(self.img.shape, np.uint8)
         # print(self.img.shape)
         cv2.circle(blank_image,(200,200), 5, (0,255,255), -1)
@@ -143,7 +253,7 @@ class after_corner_detection():
 
 
         for i in range(self.corner_points.shape[0]):
-            cv2.circle(self.img, (self.corner_points[i][1], self.corner_points[i][2]), 3, self.colors[self.corner_points[i][0]], -1)
+            cv2.circle(circle_img, (self.corner_points[i][1], self.corner_points[i][2]), 3, self.colors[self.corner_points[i][0]], -1)
             cv2.circle(blank_image, (self.corner_points[i][1], self.corner_points[i][2]), 3, self.colors[self.corner_points[i][0]], -1)
 
             if self.corner_points[i][0]==0:
@@ -204,8 +314,8 @@ class after_corner_detection():
         if n_inside_corner_pairs>0 and n_outside_corner_pairs ==0:
             inside_pair_idx = inside_pairs['closest_pair_index']
             if out_cnt ==1 :
-                print(abs(self.unit_vector_mul(inside_pairs[n_inside_corner_pairs]['angle'], self.angle_between_points(outside_corner_points[0], inside_pairs[n_inside_corner_pairs]['corner1']))))
-                print(abs(self.unit_vector_mul(inside_pairs[n_inside_corner_pairs]['angle'], self.angle_between_points(outside_corner_points[0], inside_pairs[n_inside_corner_pairs]['corner2']))))
+                # print(abs(self.unit_vector_mul(inside_pairs[n_inside_corner_pairs]['angle'], self.angle_between_points(outside_corner_points[0], inside_pairs[n_inside_corner_pairs]['corner1']))))
+                # print(abs(self.unit_vector_mul(inside_pairs[n_inside_corner_pairs]['angle'], self.angle_between_points(outside_corner_points[0], inside_pairs[n_inside_corner_pairs]['corner2']))))
                 if abs(self.unit_vector_mul(inside_pairs[inside_pair_idx]['angle'], self.angle_between_points(outside_corner_points[0], inside_pairs[inside_pair_idx]['corner1'])))<0.2:
                     match_idx = 'corner1'
                     non_match_idx = 'corner2'
@@ -216,26 +326,29 @@ class after_corner_detection():
                     match_idx = None
 
                 if match_idx is not None:
-                    self.draw_line([blank_image, self.img], inside_pairs[inside_pair_idx]['corner1'], inside_pairs[inside_pair_idx]['corner2'], 'inside')
-                    self.draw_line([blank_image, self.img], outside_corner_points[0], inside_pairs[inside_pair_idx][match_idx], 'middle')
+                    self.draw_line([blank_image, circle_img], inside_pairs[inside_pair_idx]['corner1'], inside_pairs[inside_pair_idx]['corner2'], 'inside')
+                    self.draw_line([blank_image, circle_img], outside_corner_points[0], inside_pairs[inside_pair_idx][match_idx], 'middle')
 
                     temp_angle = self.angle_between_points(outside_corner_points[0], inside_pairs[inside_pair_idx][match_idx])
                     temp_angle = self.angle_converter (temp_angle, 'up')
                     temp_point,_ = self.orth_opposite_point_calc(inside_pairs[inside_pair_idx][non_match_idx],inside_pairs[inside_pair_idx][non_match_idx],temp_angle,np.sqrt(self.length_between_points(outside_corner_points[0], inside_pairs[inside_pair_idx][match_idx])))
-                    self.draw_line([blank_image, self.img], temp_point, inside_pairs[inside_pair_idx][non_match_idx], 'middle')
-                    self.draw_line([blank_image, self.img], temp_point, outside_corner_points[0], 'outside')
+                    self.draw_line([blank_image, circle_img], temp_point, inside_pairs[inside_pair_idx][non_match_idx], 'middle')
+                    self.draw_line([blank_image, circle_img], temp_point, outside_corner_points[0], 'outside')
 
 
-                print(match_idx)
+                # print(match_idx)
 
             if out_cnt ==0 or match_idx is None:
-                orth_angle = self.orth_angle_calc(inside_pairs[inside_pair_idx]['angle'], 'up')
-                orth_opposite_1, orth_opposite_2 = self.orth_opposite_point_calc(inside_pairs[inside_pair_idx]['corner1'], inside_pairs[inside_pair_idx]['corner2'], orth_angle)
+                orth_angle_1 = self.orth_angle_calc_with_hough(inside_pairs[inside_pair_idx]['angle'], 'up', inside_pairs[inside_pair_idx]['corner1'], opt.hough,'corner1')
+                orth_angle_2 = self.orth_angle_calc_with_hough(inside_pairs[inside_pair_idx]['angle'], 'up', inside_pairs[inside_pair_idx]['corner2'], opt.hough,'corner2')
 
-                self.draw_line([blank_image, self.img], inside_pairs[inside_pair_idx]['corner1'], inside_pairs[inside_pair_idx]['corner2'], 'inside')
-                self.draw_line([blank_image, self.img], orth_opposite_1, orth_opposite_2, 'outside')
-                self.draw_line([blank_image, self.img], orth_opposite_1, inside_pairs[inside_pair_idx]['corner1'], 'middle')
-                self.draw_line([blank_image, self.img], orth_opposite_2, inside_pairs[inside_pair_idx]['corner2'], 'middle')
+                orth_opposite_1, _ = self.orth_opposite_point_calc(inside_pairs[inside_pair_idx]['corner1'], inside_pairs[inside_pair_idx]['corner2'], orth_angle_1)
+                _, orth_opposite_2 = self.orth_opposite_point_calc(inside_pairs[inside_pair_idx]['corner1'], inside_pairs[inside_pair_idx]['corner2'], orth_angle_2)
+
+                self.draw_line([blank_image, circle_img], inside_pairs[inside_pair_idx]['corner1'], inside_pairs[inside_pair_idx]['corner2'], 'inside')
+                self.draw_line([blank_image, circle_img], orth_opposite_1, orth_opposite_2, 'outside')
+                self.draw_line([blank_image, circle_img], orth_opposite_1, inside_pairs[inside_pair_idx]['corner1'], 'middle')
+                self.draw_line([blank_image, circle_img], orth_opposite_2, inside_pairs[inside_pair_idx]['corner2'], 'middle')
 
 
         if n_outside_corner_pairs>0 and n_inside_corner_pairs ==0:
@@ -254,31 +367,38 @@ class after_corner_detection():
                     match_idx = None
 
                 if match_idx is not None:
-                    self.draw_line([blank_image, self.img], outside_pairs[outside_pair_idx]['corner1'], outside_pairs[outside_pair_idx]['corner2'], 'outside')
-                    self.draw_line([blank_image, self.img], inside_corner_points[0], outside_pairs[outside_pair_idx][match_idx], 'middle')
+                    self.draw_line([blank_image, circle_img], outside_pairs[outside_pair_idx]['corner1'], outside_pairs[outside_pair_idx]['corner2'], 'outside')
+                    self.draw_line([blank_image, circle_img], inside_corner_points[0], outside_pairs[outside_pair_idx][match_idx], 'middle')
                     temp_angle = self.angle_between_points(inside_corner_points[0], outside_pairs[outside_pair_idx][match_idx])
                     temp_angle = self.angle_converter (temp_angle, 'down')
                     temp_point,_ = self.orth_opposite_point_calc(outside_pairs[outside_pair_idx][non_match_idx],outside_pairs[outside_pair_idx][non_match_idx],temp_angle,np.sqrt(self.length_between_points(inside_corner_points[0], outside_pairs[outside_pair_idx][match_idx])))
-                    self.draw_line([blank_image, self.img], temp_point, outside_pairs[outside_pair_idx][non_match_idx], 'middle')
-                    self.draw_line([blank_image, self.img], temp_point, inside_corner_points[0], 'inside')
+                    self.draw_line([blank_image, circle_img], temp_point, outside_pairs[outside_pair_idx][non_match_idx], 'middle')
+                    self.draw_line([blank_image, circle_img], temp_point, inside_corner_points[0], 'inside')
 
-                print(match_idx)
+                # print(match_idx)
 
             if in_cnt ==0 or match_idx is None:
 
                 if abs(np.cos(self.angle_between_points(outside_pairs[outside_pair_idx]['corner1'],outside_pairs[outside_pair_idx]['corner2'])))<0.1:
                     if outside_pairs[outside_pair_idx]['corner1'][0]>200 and outside_pairs[outside_pair_idx]['corner2'][0]>200:
-                        orth_angle = self.orth_angle_calc(outside_pairs[outside_pair_idx]['angle'], 'right')
-                    if outside_pairs[outside_pair_idx]['corner1'][0]<200 and outside_pairs[outside_pair_idx]['corner2'][0]<200:
-                        orth_angle = self.orth_angle_calc(outside_pairs[outside_pair_idx]['angle'], 'left')
-                else:
-                    orth_angle = self.orth_angle_calc(outside_pairs[outside_pair_idx]['angle'], 'down')
-                orth_opposite_1, orth_opposite_2 = self.orth_opposite_point_calc(outside_pairs[outside_pair_idx]['corner1'], outside_pairs[outside_pair_idx]['corner2'], orth_angle)
+                        orth_angle_1 = self.orth_angle_calc_with_hough(outside_pairs[outside_pair_idx]['angle'], 'right', outside_pairs[outside_pair_idx]['corner1'], opt.hough,'corner1')
+                        orth_angle_2 = self.orth_angle_calc_with_hough(outside_pairs[outside_pair_idx]['angle'], 'right', outside_pairs[outside_pair_idx]['corner2'], opt.hough,'corner2')
 
-                self.draw_line([blank_image, self.img], outside_pairs[outside_pair_idx]['corner1'], outside_pairs[outside_pair_idx]['corner2'], 'outside')
-                self.draw_line([blank_image, self.img], orth_opposite_1, orth_opposite_2, 'inside')
-                self.draw_line([blank_image, self.img], orth_opposite_1, outside_pairs[outside_pair_idx]['corner1'], 'middle')
-                self.draw_line([blank_image, self.img], orth_opposite_2, outside_pairs[outside_pair_idx]['corner2'], 'middle')
+                    if outside_pairs[outside_pair_idx]['corner1'][0]<200 and outside_pairs[outside_pair_idx]['corner2'][0]<200:
+                        orth_angle_1 = self.orth_angle_calc_with_hough(outside_pairs[outside_pair_idx]['angle'], 'left', outside_pairs[outside_pair_idx]['corner1'], opt.hough,'corner1')
+                        orth_angle_2 = self.orth_angle_calc_with_hough(outside_pairs[outside_pair_idx]['angle'], 'left', outside_pairs[outside_pair_idx]['corner2'], opt.hough,'corner2')
+
+                else:
+                    orth_angle_1 = self.orth_angle_calc_with_hough(outside_pairs[outside_pair_idx]['angle'], 'down',outside_pairs[outside_pair_idx]['corner1'] , opt.hough,'corner1')
+                    orth_angle_2 = self.orth_angle_calc_with_hough(outside_pairs[outside_pair_idx]['angle'], 'down',outside_pairs[outside_pair_idx]['corner2'] , opt.hough,'corner2')
+
+                orth_opposite_1, _ = self.orth_opposite_point_calc(outside_pairs[outside_pair_idx]['corner1'], outside_pairs[outside_pair_idx]['corner2'], orth_angle_1)
+                _, orth_opposite_2 = self.orth_opposite_point_calc(outside_pairs[outside_pair_idx]['corner1'], outside_pairs[outside_pair_idx]['corner2'], orth_angle_2)
+
+                self.draw_line([blank_image, circle_img], outside_pairs[outside_pair_idx]['corner1'], outside_pairs[outside_pair_idx]['corner2'], 'outside')
+                self.draw_line([blank_image, circle_img], orth_opposite_1, orth_opposite_2, 'inside')
+                self.draw_line([blank_image, circle_img], orth_opposite_1, outside_pairs[outside_pair_idx]['corner1'], 'middle')
+                self.draw_line([blank_image, circle_img], orth_opposite_2, outside_pairs[outside_pair_idx]['corner2'], 'middle')
 
         if n_outside_corner_pairs>0 and n_inside_corner_pairs >0:
             outside_pair_idx = outside_pairs['closest_pair_index']
@@ -291,20 +411,20 @@ class after_corner_detection():
                     pair_type = False
 
                 if pair_type :
-                    self.draw_line([blank_image, self.img], outside_pairs[outside_pair_idx]['corner1'], outside_pairs[outside_pair_idx]['corner2'], 'outside')
-                    self.draw_line([blank_image, self.img], inside_pairs[inside_pair_idx]['corner1'], inside_pairs[inside_pair_idx]['corner2'], 'inside')
-                    self.draw_line([blank_image, self.img], outside_pairs[outside_pair_idx]['corner1'], inside_pairs[inside_pair_idx]['corner1'], 'middle')
-                    self.draw_line([blank_image, self.img], outside_pairs[outside_pair_idx]['corner2'], inside_pairs[inside_pair_idx]['corner2'], 'middle')
+                    self.draw_line([blank_image, circle_img], outside_pairs[outside_pair_idx]['corner1'], outside_pairs[outside_pair_idx]['corner2'], 'outside')
+                    self.draw_line([blank_image, circle_img], inside_pairs[inside_pair_idx]['corner1'], inside_pairs[inside_pair_idx]['corner2'], 'inside')
+                    self.draw_line([blank_image, circle_img], outside_pairs[outside_pair_idx]['corner1'], inside_pairs[inside_pair_idx]['corner1'], 'middle')
+                    self.draw_line([blank_image, circle_img], outside_pairs[outside_pair_idx]['corner2'], inside_pairs[inside_pair_idx]['corner2'], 'middle')
 
                 else:
-                    self.draw_line([blank_image, self.img], outside_pairs[outside_pair_idx]['corner1'], outside_pairs[outside_pair_idx]['corner2'], 'outside')
-                    self.draw_line([blank_image, self.img], inside_pairs[inside_pair_idx]['corner1'], inside_pairs[inside_pair_idx]['corner2'], 'inside')
-                    self.draw_line([blank_image, self.img], outside_pairs[outside_pair_idx]['corner2'], inside_pairs[inside_pair_idx]['corner1'], 'middle')
-                    self.draw_line([blank_image, self.img], outside_pairs[outside_pair_idx]['corner1'], inside_pairs[inside_pair_idx]['corner2'], 'middle')
+                    self.draw_line([blank_image, circle_img], outside_pairs[outside_pair_idx]['corner1'], outside_pairs[outside_pair_idx]['corner2'], 'outside')
+                    self.draw_line([blank_image, circle_img], inside_pairs[inside_pair_idx]['corner1'], inside_pairs[inside_pair_idx]['corner2'], 'inside')
+                    self.draw_line([blank_image, circle_img], outside_pairs[outside_pair_idx]['corner2'], inside_pairs[inside_pair_idx]['corner1'], 'middle')
+                    self.draw_line([blank_image, circle_img], outside_pairs[outside_pair_idx]['corner1'], inside_pairs[inside_pair_idx]['corner2'], 'middle')
             else:
                 that_one_outside_corner_idx = np.array(outside_corner_points_length).argsort()[0]
-                print(abs(self.unit_vector_mul(inside_pairs[n_inside_corner_pairs]['angle'], self.angle_between_points(outside_corner_points[0], inside_pairs[n_inside_corner_pairs]['corner1']))))
-                print(abs(self.unit_vector_mul(inside_pairs[n_inside_corner_pairs]['angle'], self.angle_between_points(outside_corner_points[0], inside_pairs[n_inside_corner_pairs]['corner2']))))
+                # print(abs(self.unit_vector_mul(inside_pairs[n_inside_corner_pairs]['angle'], self.angle_between_points(outside_corner_points[0], inside_pairs[n_inside_corner_pairs]['corner1']))))
+                # print(abs(self.unit_vector_mul(inside_pairs[n_inside_corner_pairs]['angle'], self.angle_between_points(outside_corner_points[0], inside_pairs[n_inside_corner_pairs]['corner2']))))
 
                 if abs(self.unit_vector_mul(inside_pairs[inside_pair_idx]['angle'], self.angle_between_points(outside_corner_points[that_one_outside_corner_idx], inside_pairs[inside_pair_idx]['corner1'])))<0.1:
                     match_idx = 'corner1'
@@ -314,17 +434,17 @@ class after_corner_detection():
                     non_match_idx = 'corner1'
                 else:
                     match_idx = None
-                print(match_idx)
+                # print(match_idx)
 
                 if match_idx is not None:
-                    self.draw_line([blank_image, self.img], inside_pairs[inside_pair_idx]['corner1'], inside_pairs[inside_pair_idx]['corner2'], 'inside')
-                    self.draw_line([blank_image, self.img], outside_corner_points[that_one_outside_corner_idx], inside_pairs[inside_pair_idx][match_idx], 'middle')
+                    self.draw_line([blank_image, circle_img], inside_pairs[inside_pair_idx]['corner1'], inside_pairs[inside_pair_idx]['corner2'], 'inside')
+                    self.draw_line([blank_image, circle_img], outside_corner_points[that_one_outside_corner_idx], inside_pairs[inside_pair_idx][match_idx], 'middle')
 
                     temp_angle = self.angle_between_points(outside_corner_points[that_one_outside_corner_idx], inside_pairs[inside_pair_idx][match_idx])
                     temp_angle = self.angle_converter (temp_angle, 'up')
                     temp_point,_ = self.orth_opposite_point_calc(inside_pairs[inside_pair_idx][non_match_idx],inside_pairs[inside_pair_idx][non_match_idx],temp_angle,np.sqrt(self.length_between_points(outside_corner_points[that_one_outside_corner_idx], inside_pairs[inside_pair_idx][match_idx])))
-                    self.draw_line([blank_image, self.img], temp_point, inside_pairs[inside_pair_idx][non_match_idx], 'middle')
-                    self.draw_line([blank_image, self.img], temp_point, outside_corner_points[that_one_outside_corner_idx], 'outside')
+                    self.draw_line([blank_image, circle_img], temp_point, inside_pairs[inside_pair_idx][non_match_idx], 'middle')
+                    self.draw_line([blank_image, circle_img], temp_point, outside_corner_points[that_one_outside_corner_idx], 'outside')
 
 
         # if in_cnt >1 : 
@@ -401,7 +521,7 @@ class after_corner_detection():
                 #     cv2.line(blank_image, inside_corner_points[in_idx2], outside_corner_points[out_idx2], self.colors[2],2,1)
 
 
-        cv2.imshow("Center AVM", self.img)
+        cv2.imshow("Center AVM", circle_img)
         cv2.imshow("Only the Corner Points", blank_image)
 
         # gray = cv2.cvtColor(blank_image, cv2.COLOR_RGB2GRAY)
@@ -446,7 +566,7 @@ class after_corner_detection():
             # Convert your ROS Image message to OpenCV2
         # print(msg)
         self.corner_points = np.array(self.string_to_numpy(msg.data)).reshape(-1,3)
-        print(self.corner_points)
+        # print(self.corner_points)
 
 
 
@@ -464,7 +584,15 @@ class after_corner_detection():
 
 def parse_opt():
     parser = argparse.ArgumentParser()
+    parser.add_argument('--hough', action='store_true')
+    parser.add_argument('--pad', type=int, default = 60)
+    parser.add_argument('--dot_threshold', type=float, default = 0.05)
+    parser.add_argument('--dist_threshold', type=float, default = 64)
+    parser.add_argument('--max_line', type=int, default = 30)
+    parser.add_argument('--max_dist', type=int, default = 5)
+
     opt = parser.parse_args()
+
     return opt
 
 
