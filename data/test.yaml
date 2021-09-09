@@ -1,0 +1,5 @@
+names: [out, in, aux_out, aux_in]
+nc: 4
+test: ./data/dyros/test/valid.txt
+train: ./data/dyros/test/train.txt
+val: ./data/dyros/test/test.txt

@@ -1,0 +1,3 @@
+../AVM_center_data_4class_test/images/trial_A/new_image_70.jpeg
+../AVM_center_data_4class_test/images/trial_A/new_image_213.jpeg
+../AVM_center_data_4class_test/images/trial_A/new_image_215.jpeg
