@@ -22,12 +22,12 @@ I've created anaconda environment named ```yhpark``` with python version 3.7 for
 ```
 conda activate yhpark
 ```
-
+<!-- 
 For DeepSORT, I created a separate environment named ```deepsort```. For any kind of DeepSORT related experiments, you must activate this environment. 
 
 ```
 conda activate deepsort
-```
+``` -->
 
 **If you want to create your own conda environment on a new computer**, follow the steps below: 
 
@@ -69,9 +69,9 @@ ssh dyros@147.46.19.190 -p 1001
 
 
 ## Dataset
-Image-type dataset is first generated from raw bagfiles recorded during actual parking experiments. (Run ``rosrun yhpark_psd image_saver.py`` to save imagefiles from existing bagfiles.) Total 6 parking experiments on different parking spots are executed, and we name those experiments as trial A~F. Network training is usually done with trial A,B,C and testing is remaining trials are used for testing. 
+Image-type dataset is first generated from raw bagfiles recorded during actual parking experiments. (Run ``rosrun yhpark_psd image_saver.py`` to save imagefiles from existing bagfiles.) Total 6 parking experiments on different parking spots are executed, and we name those experiments as trial A~F. Network training is usually done with trial A,B,C and remaining trials are used for testing. 
 
-Datasets is (and should be) stored right outside this repository, using following folder structure. 
+Dataset is (and should be) stored right outside this repository, using following folder structure. 
 
 ```
 ..
@@ -112,27 +112,23 @@ To see the details of YOLO architecture and understand how and why it works, I r
 
 Checkout the [YOLOv5 code repository](https://github.com/ultralytics/yolov5) to see how YOLO label is typically formatted. Following python code is written to generate labels following the format that YOLOv5 requires for training. 
 
-**Disclaimer:** Due to limitation of OpenCV's cursor-related function, only two classes can be differentiated per one execution: Left-click and Right-click. But I believe there's a better and clever solution that can mark all 4 classes at once using some kind of keyboard inputs alongside with mouse clicks! 
+<!-- **Disclaimer:** Due to limitation of OpenCV's cursor-related function, only two classes can be differentiated per one execution: Left-click and Right-click. But I believe there's a better and clever solution that can mark all 4 classes at once using some kind of keyboard inputs alongside with mouse clicks!  -->
+```
+python annotation_tool_for_avm.py --trial trial_D --img_size 500 --bb_size 20
+```
+Before clicking on the marking point, you should specify the type of the point by keyboard input. 
 
 ```
-class 0 : inner-side corner
-class 1 : outer-side corner
-class 2 : inner-side auxiliary point
-class 3 : outer-side auxiliary point
+class 0 : outer-side corner  (Key = A)
+class 1 : inner-side corner  (Key = S)
+class 2 : outer-side auxiliary point  (Key = D)
+class 3 : outer-side auxiliary point  (Key = F)
 ```
 
-Thus, to create label with 4 classes, I had to go through the dataset two times. Again, you can do this in a better way. 
+Checkout the demo video below. 
 
-```
-python annotation_tool_for_avm.py --trial trial_D --class 0,1 ## label class 0,1
-python annotation_tool_for_avm.py --trial trial_D --class 2,3 ## label class 2,3
-```
 
-There are other arguments that can be adjusted, including the size of the bounding box. To see all the adjustable arguments, run:
 
-```
-python annotation_tool_for_avm.py --help
-```
 
 ### Training
 
