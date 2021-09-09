@@ -169,13 +169,13 @@ python ROS_detect_marking_points.py --yolo_weight ./runs/train/EXPERIMENT_NAME_O
 
 #### WorkFlow
 
-<!-- ![https://cln.sh/zYXAEu/download](https://cln.sh/zYXAEu/download) -->
+![https://cln.sh/zYXAEu/download](https://cln.sh/zYXAEu/download)
 
-<center>
+<!-- <center>
 <video width="390" height="516" controls>
   <source src="https://cln.sh/zYXAEu/download">
 </video>
-</center>
+</center> -->
 
 <!-- [![Watch the video](https://img.youtube.com/vi/T-D1KVIuvjA/maxresdefault.jpg)](https://youtu.be/T-D1KVIuvjA) -->
 
