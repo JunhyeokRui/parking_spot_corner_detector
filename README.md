@@ -71,7 +71,7 @@ Datasets is (and should be) stored right outside this repository, using followin
 
 ```
 ..
-├── AVM_center_400                   
+├── AVM_center_data_4class             
 │   ├── Images
 │   │   ├── trial_A
 │   │   │   ├── image_001.jpeg
@@ -88,8 +88,7 @@ Datasets is (and should be) stored right outside this repository, using followin
 │   │   ├── trial_B
 │   │   ├── trial_C
 │   │   └── ...
-├── LICENSE
-└── README.md
+└── └── README.md
 
 ```
 ``../AVM_center_400/Labels/trial_*/image_*.txt`` is the corresponding YOLO label for the image  ``../AVM_center_400/Images/trial_*/image_*.jpeg``.
@@ -133,15 +132,57 @@ python annotation_tool_for_avm.py --help
 
 #### Training
 
-YOLO, like any other deep learning models, requires large amount of data, and large batch size. In that sense, RTX2060 Super with 8GB VRAM was not sufficient enough for YOLO training. I used my personal deep learning GPU server equipped with Tesla-T4 with 15GB VRAM or and RTX3080TI with 12GB VRAM. If retraining is required in some time in the future, I recommend using RTX3090 with 24GB VRAM (if possible) with maximum batchsize that VRAM allows. 
+To create train / test / validation split based on parking episodes, you must run the following code. 
 
-Fortunately, YOLOv5 code is quite intuitively written and highly customizable. If enough GPU power is ready, training will not become a problem. One thing though, to create train / test / validation split based on parking episodes, you must follow the following procedure:
+```
+python split_generator.py --train A,B,C --valid D,E --test F --dataset AVM_center_data --run split_ABC_DE_F.yaml
+```
 
-1. Use 
+This code automatically creates ```./data/split_ABC_DE_F.yaml``` file that is required for YOLO training. You can specify this split by passing the YAML file name through python argument. 
 
-#### Detection 
+```
+python train.py --batch-size 128 --data data/split_ABC_DE_F.yaml --name EXPERIMENT_NAME_OF_YOUR_CHOICE
+```
+
+Running this creates a YOLO training weight under ```./runs/train/EXPERIMENT_NAME_OF_YOUR_CHOICE/weights/last.pt```. 
+
+YOLO, like any other deep learning models, requires large amount of data, and large batch size. In that sense, RTX2060 Super with 8GB VRAM was not sufficient enough for YOLO training. I used my personal deep learning GPU server equipped with Tesla-T4 with 15GB VRAM and RTX3080TI with 12GB VRAM. If retraining is required in some time in the future, I recommend using RTX3090 with 24GB VRAM (if possible) with maximum batchsize that VRAM allows. Fortunately, YOLOv5 code is quite intuitively written and highly customizable. If enough GPU power is ready, training will not become a problem. 
+
+
+#### Check the Training result
+
+YOu might want to check the training result via running detections on image-level. You can use the following code to check out the detection. Detection runs per trial. 
+
+```
+python detect.py --weights ./runs/train/EXPERIMENT_NAME_OF_YOUR_CHOICE/weights/last.pt --source ../AVM_center_data_4class/image/trial_F --name test_trial_F
+```
+
+This code saves the detection result on ```./runs/detect/test_trial_F/```. 
+
+#### Detection on ROS
+
+I don't know if this is a preferable solution or not in ROS community, but I've written a single python file that publishes the YOLO detection result in a concatenated string format. 
+
+```
+python ROS_detect_marking_points.py --yolo_weight ./runs/train/EXPERIMENT_NAME_OF_YOUR_CHOICE/weights/last.pt --view-img
+```
+
+#### WorkFlow
+
+<!-- ![https://cln.sh/zYXAEu/download](https://cln.sh/zYXAEu/download) -->
+
+<center>
+<video width="390" height="516" controls>
+  <source src="https://cln.sh/zYXAEu/download">
+</video>
+</center>
+
+<!-- [![Watch the video](https://img.youtube.com/vi/T-D1KVIuvjA/maxresdefault.jpg)](https://youtu.be/T-D1KVIuvjA) -->
+
+
+
+
+<!-- #### Detection 
 
 I've written a code that outputs 
-
-
-![https://cln.sh/xX2FVy/download](https://cln.sh/eZzXL6/download)
+ -->

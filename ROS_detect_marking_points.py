@@ -110,8 +110,8 @@ class yolo_for_ros():
         print('loading refinement model from {}'.format(os.path.join('./refinement_network_weights',refinement_weight)))
         self.refinement_model = resnet18()
         self.refinement_model.fc = nn.Sequential(nn.Linear(512,2),nn.Sigmoid())
-        refinement_state = torch.load(os.path.join('./refinement_network_weights',refinement_weight))
-        self.refinement_model.load_state_dict(refinement_state)
+        # refinement_state = torch.load(os.path.join('./refinement_network_weights',refinement_weight))
+        # self.refinement_model.load_state_dict(refinement_state)
         self.refinement_model = self.refinement_model.cuda()
         print('MODEL ALL LOADED!!')
 
