@@ -167,22 +167,9 @@ I don't know if this is a preferable solution or not in ROS community, but I've 
 python ROS_detect_marking_points.py --yolo_weight ./runs/train/EXPERIMENT_NAME_OF_YOUR_CHOICE/weights/last.pt --view-img
 ```
 
-#### WorkFlow
-
-![https://cln.sh/zYXAEu/download](https://cln.sh/zYXAEu/download)
-
-<!-- <center>
-<video width="390" height="516" controls>
-  <source src="https://cln.sh/zYXAEu/download">
-</video>
-</center> -->
-
-<!-- [![Watch the video](https://img.youtube.com/vi/T-D1KVIuvjA/maxresdefault.jpg)](https://youtu.be/T-D1KVIuvjA) -->
+#### Marking Point Detection WorkFlow
 
 
+https://user-images.githubusercontent.com/68195716/132668170-fafce57b-352e-41f5-8c2d-db991a7137a4.mp4
 
 
-<!-- #### Detection 
-
-I've written a code that outputs 
- -->
