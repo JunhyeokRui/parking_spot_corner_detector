@@ -379,7 +379,7 @@ class yolo_for_ros():
 
 def parse_opt():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--yolo_weight', nargs='+', type=str, default='./runs/train/4class_train_ABC_real/weights/last.pt', help='model.pt path(s)')
+    parser.add_argument('--yolo_weight', nargs='+', type=str, default='./runs/train/avm_train_on_ABC/weights/last.pt', help='model.pt path(s)')
     parser.add_argument('--refinement_weight', nargs='+', type=str, default='train_ABC_resize_80_crop_45_55_20_resnet18/200_epoch_model.pth', help='model.pt path(s)')
     parser.add_argument('--source', type=str, default='data/images', help='file/dir/URL/glob, 0 for webcam')
     parser.add_argument('--imgsz', '--img', '--img-size', type=int, default=512, help='inference size (pixels)')

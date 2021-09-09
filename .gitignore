@@ -129,7 +129,5 @@ dmypy.json
 .pyre/
 
 
-refinement_network_weights/
+deprecated/
 runs/
-data/
-angle_estimator_weights/
