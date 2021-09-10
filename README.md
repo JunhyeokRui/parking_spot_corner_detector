@@ -31,7 +31,7 @@ conda activate deepsort
 
 **If you want to create your own conda environment on a new computer**, follow the steps below: 
 
-1. Install Anaconda. Remember to restart your terminal after installing.
+1. Install Anaconda. Remember to restart your terminal (or run ```source ~/.bashrc``` if you use ```bash```, ```source ~/.zshrc``` if you use ```zsh```) after installing.
     ```
     wget https://repo.anaconda.com/archive/Anaconda3-2021.05-Linux-x86_64.sh
     chmod +x ./Anaconda3-2021.05-Linux-x86_64.sh
@@ -59,7 +59,7 @@ If you're connected to the local network of the lab, you can access the computer
 ssh dyros@192.168.0.47
 ```
 
-If you're accessing from external network outside of the lab, you can access vai port 1001: I've forwarded the port 1001 to SSH port 22 for local IP. 
+If you're accessing from external network outside of the lab, you can access via port 1001: I've forwarded the port 1001 to SSH port 22 for my laptop. 
 
 ```
 ssh dyros@147.46.19.190 -p 1001
@@ -104,7 +104,7 @@ Dataset is (and should be) stored right outside this repository, using following
 
 This system uses YOLO to precisely estimate the position of each corner points. You might wonder, how can YOLO, basically an object detection algorithm, be used for such precise point localization task. Surprisingly, without any additional help of cascading techniques, YOLO alone itself was able to precisely estimate the position of such keypoints. This allowed much faster detection time compared to other techniques. 
 
-To see the details of YOLO architecture and understand how and why it works, I recommend reading the following article: 
+To see the details of YOLO architecture and understand how and why it works, I recommend reading the following article: [YOLO Explained. What is YOLO?](https://medium.com/analytics-vidhya/yolo-explained-5b6f4564f31)
 
 
 
@@ -125,7 +125,7 @@ class 2 : outer-side auxiliary point  (Key = D)
 class 3 : outer-side auxiliary point  (Key = F)
 ```
 
-Checkout the demo video below. 
+Checkout the demo to see how this annotation tool works. Pay attention to the keybaord inputs. 
 
 
 
@@ -142,20 +142,20 @@ To create train / test / validation split based on parking episodes, you must ru
 python split_generator.py --train A,B,C --valid D,E --test F --dataset AVM_center_data --run split_ABC_DE_F.yaml
 ```
 
-This code automatically creates ```./data/split_ABC_DE_F.yaml``` file that is required for YOLO training. You can specify this split by passing the YAML file name through python argument during training. 
+This code automatically creates ```./data/split_ABC_DE_F.yaml``` file that is required for YOLO training. You can pass this split YAML file through python argument during training. 
 
 ```
 python train.py --batch-size 128 --data data/split_ABC_DE_F.yaml --name EXPERIMENT_NAME_OF_YOUR_CHOICE
 ```
 
-Running this creates a YOLO training weight under ```./runs/train/EXPERIMENT_NAME_OF_YOUR_CHOICE/weights/last.pt```. 
+Running this saves a trained weight under ```./runs/train/EXPERIMENT_NAME_OF_YOUR_CHOICE/weights/last.pt```. 
 
-YOLO, like any other deep learning models, requires large amount of data, and large batch size. In that sense, RTX2060 Super with 8GB VRAM was not sufficient enough for YOLO training. I used my personal deep learning GPU server equipped with Tesla-T4 with 15GB VRAM and RTX3080TI with 12GB VRAM. If retraining is required in some time in the future, I recommend using RTX3090 with 24GB VRAM (if possible) with maximum batchsize that VRAM allows. Fortunately, YOLOv5 code is quite intuitively written and highly customizable. If enough GPU power is ready, training will not become a problem. 
+**Note:** YOLO, like any other deep learning models, requires large amount of data, and large batch size. In that sense, RTX2060 Super with 8GB VRAM is not optimal for YOLO training (although it can technically work). I used my personal deep learning GPU servers each equipped with Tesla-T4 (15GB VRAM)and RTX3080TI (12GB VRAM). If retraining is required in some time in the future, I recommend using RTX3090 computer with 24GB VRAM (if possible) with maximum batchsize that the GPU allows. Fortunately, YOLOv5 code is quite intuitively written and is highly customizable. If enough GPU power is ready, training will not be a problem. I've made some changes to the code that better suits the point detection task. 
 
 
 ### Check the Training result
 
-YOu might want to check the training result via running detections on image-level. You can use the following code to check out the detection. Detection runs per trial. 
+Before running on ROS, you might want to check the training result on image files. You can use the following code to check out the detection results. Detection code runs per trial. 
 
 ```
 python detect.py --weights ./runs/train/EXPERIMENT_NAME_OF_YOUR_CHOICE/weights/last.pt --source ../AVM_center_data_4class/image/trial_F --name test_trial_F
@@ -165,11 +165,12 @@ This code saves the detection result on ```./runs/detect/test_trial_F/```.
 
 ### Detection on ROS
 
-I don't know if this is a preferable solution or not in ROS community, but I've written a single python file that publishes the YOLO detection result in a concatenated string format. 
+I've written a simple python file that publishes the YOLO detection result in a concatenated string format. This concatenated string format will be properly subscribed by ```ROS_inference.py``` script, explained below. 
 
 ```
 python ROS_detect_marking_points.py --yolo_weight ./runs/train/EXPERIMENT_NAME_OF_YOUR_CHOICE/weights/last.pt --view-img
 ```
+You should use ```--view-img``` flag to open up an opencv window that shows the live detection results.  d
 
 ### Marking Point Detection WorkFlow
 
@@ -177,3 +178,104 @@ python ROS_detect_marking_points.py --yolo_weight ./runs/train/EXPERIMENT_NAME_O
 https://user-images.githubusercontent.com/68195716/132668170-fafce57b-352e-41f5-8c2d-db991a7137a4.mp4
 
 
+
+## Parking Slot Inference
+
+**Disclaimer: The code is currently very, very nasty and dirty. I am currently making some changes in this code!**
+
+Using the detected marking points, PSDT-Net infers the position of parking slots. You can use 
+
+```
+python ROS_inference.py --view-img
+```
+to see its results in real-time. Remember, you should run  ```ROS_detect_marking_points.py``` before you run the ```ROS_inference.py``` script. 
+
+
+
+## Marking Point Tracking
+
+### Overview
+
+PSDT-Net uses DeepSORT to track different marking points. DeepSORT is a deep learning variant of SORT algorithm. SORT performs data association using just the bounding box size and location. However, this can be problematic in our case where the bounding box size is quite static. DeepSORT can be a solution here, since it actually **sees** the content inside the bounding box using CNN. I highly recommend reading this article if you're not familiar with DeepSORT: [DeepSORT Explained](https://nanonets.com/blog/object-tracking-deepsort/). 
+
+### Run with pretrained weight
+
+Even with a pretrained feature extractor network, DeepSORT can quite robustly track multiple marking points. You can check the result with pretrained weights using the code below:
+
+```
+python ROS_track_marking_points.py --view-img
+```
+
+### Create dataset for feature extractor
+
+But as you can see, pretrained weight trained on Market1501 dataset (suited for human tracking) induces a lot of label switching. It might be appropriate to train a custom feature extractor network to increase the robustness of DeepSORT. What we should first do is to **create a new dataset** for tracking. The dataset should contain folders of diferent marking points, captured from different instances. The dataset has the following structure. 
+
+```
+..
+├── dyros_deepsort_dataset           
+│   ├── Cropped_30
+│   │   ├── point_1
+│   │   │   ├── point_1_001.jpeg
+│   │   │   ├── point_1_002.jpeg
+│   │   │   ├── point_1_003.jpeg
+│   │   │   └── ...
+│   │   ├── point_2
+│   │   │   ├── point_2_001.jpeg
+│   │   │   ├── point_2_002.jpeg
+│   │   │   ├── point_2_003.jpeg
+│   │   │   └── ...
+│   │   ├── point_3
+│   │   ├── point_4
+│   │   ├── ...
+│   │   └── ...
+│   ├── Pixel_Info
+│   │   ├── point_1
+│   │   │   ├── point_1_001.txt
+│   │   │   ├── point_1_002.txt
+│   │   │   ├── point_1_003.txt
+│   │   │   └── ...
+│   │   ├── point_2
+│   │   │   ├── point_2_001.txt
+│   │   │   ├── point_2_002.txt
+│   │   │   ├── point_2_003.txt
+│   │   │   └── ...
+│   │   ├── point_3
+│   │   ├── point_4
+│   │   ├── ...
+│   │   └── ...
+└── └── README.md
+
+```
+
+Note, ```point_a``` and ```point_b``` are physically differernt marking points, while ```point_a_00x.jpeg``` and ```point_a_00y.jpeg``` are the same physical marking points, captured from different frames. I created this dataset using the following annotation tool:
+
+```
+python annotation_tool_for_avm_deepsort.py --trial trial_A --resume 0 --crop 30
+```
+
+**Disclaimer:** I have to clear out some unused functions and codes. Work in progress. 
+
+### Training siamese network with Triplet loss
+
+I used the famous [Pytorch Metric Learning](https://github.com/KevinMusgrave/pytorch-metric-learning) library to train the feature extractor network.  Check out ```siaemese_training.py``` code that I used for training. It uses ResNet as a CNN architecture. 
+
+```
+python siamese_training.py --crop-size 30 --margin 0.3 --epoch 300 --name TEST
+```
+
+Running this code saves its trained weight in the following directory: ```./deep_sort_pytorch/deep_sort/deep/TEST_last.pth```.
+
+You can perform hyperparameter tuning adjusting the following arguments; 
+
+```
+python siamese_training.py --help
+
+>  --crop-size # bounding box size around the marking point, default = 30
+>  --margin # minimum distance between the embeddings of different marking points, default = 0.3
+>  --batch-size  # default = 64
+>  --rot_aug # default = True
+>  --gaussian_aug # default = False
+>  --resize # default = 0 (no resizing)
+```
+
+**Disclaimer:** I have to clear out some unused functions and codes. Work in progress. 
