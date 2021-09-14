@@ -41,9 +41,9 @@ conda activate deepsort
     ```
     conda create -n YOUR_ENVIRONMENT_NAME python=3.7
     ```
-3. Install all the python packages I used using ```requirements_pytorch.txt``` file. 
+3. Install all the python packages I used using ```requirements.txt``` file. 
    ```
-   pip install -r requirements_pytorch.txt
+   pip install -r requirements.txt
    ```
    **Disclaimer:** I deliberately deleted the PyTorch-related python packages from above textfile, since you may have to install different pytorch pacakges depending on your CUDA version. **Install PyTorch from [https://pytorch.org](https://pytorch.org) using pip**. 
 
