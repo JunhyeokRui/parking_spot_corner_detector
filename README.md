@@ -41,11 +41,11 @@ conda activate deepsort
     ```
     conda create -n YOUR_ENVIRONMENT_NAME python=3.7
     ```
-3. Install all the python packages I used using ```requirements.txt``` file. 
+3. Install all the python packages I used using ```requirements_pytorch.txt``` file. 
    ```
-   pip install -r requirements.txt
+   pip install -r requirements_pytorch.txt
    ```
-   **Disclaimer:** You may have to install different version of PyTorch depending on your GPU's CUDA version. I used CUDA version 10.1 for this project, but it doesn't matter. If you have CUDA 11.0+, no worries! Just reinstall PyTorch with CUDA 11.1. Installing PyTorch is really easy: [https://pytorch.org](https://pytorch.org).
+   **Disclaimer:** I deliberately deleted the PyTorch-related python packages from above textfile, since you may have to install different pytorch pacakges depending on your CUDA version. **Install PyTorch from [https://pytorch.org](https://pytorch.org) using pip**. 
 
 
 
@@ -125,7 +125,7 @@ class 2 : outer-side auxiliary point  (Key = D)
 class 3 : outer-side auxiliary point  (Key = F)
 ```
 
-Checkout the demo to see how this annotation tool works. Pay attention to the keybaord inputs. 
+Checkout the demo to see how this annotation tool works. Pay attention to the keyboard inputs. 
 
 
 
@@ -165,12 +165,13 @@ This code saves the detection result on ```./runs/detect/test_trial_F/```.
 
 ### Detection on ROS
 
-I've written a simple python file that publishes the YOLO detection result in a concatenated string format. This concatenated string format will be properly subscribed by ```ROS_inference.py``` script, explained below. 
+I've written a simple python code that publishes the YOLO detection result in a concatenated string format. This concatenated string format will be properly subscribed by ```ROS_inference.py``` code, explained below. 
 
 ```
 python ROS_detect_marking_points.py --yolo_weight ./runs/train/EXPERIMENT_NAME_OF_YOUR_CHOICE/weights/last.pt --view-img
 ```
-You should use ```--view-img``` flag to open up an opencv window that shows the live detection results.  d
+
+You should use ```--view-img``` flag to open up an opencv window that shows the live detection results. 
 
 ### Marking Point Detection WorkFlow
 
@@ -180,8 +181,6 @@ https://user-images.githubusercontent.com/68195716/132668170-fafce57b-352e-41f5-
 
 
 ## Parking Slot Inference
-
-**Disclaimer: The code is currently very, very nasty and dirty. I am currently making some changes in this code!**
 
 Using the detected marking points, PSDT-Net infers the position of parking slots. You can use 
 
@@ -213,7 +212,7 @@ But as you can see, pretrained weight trained on Market1501 dataset (suited for 
 ```
 ..
 ├── dyros_deepsort_dataset           
-│   ├── Cropped_30
+│   ├── cropped_30
 │   │   ├── point_1
 │   │   │   ├── point_1_001.jpeg
 │   │   │   ├── point_1_002.jpeg
@@ -228,7 +227,7 @@ But as you can see, pretrained weight trained on Market1501 dataset (suited for 
 │   │   ├── point_4
 │   │   ├── ...
 │   │   └── ...
-│   ├── Pixel_Info
+│   ├── pixel_labels
 │   │   ├── point_1
 │   │   │   ├── point_1_001.txt
 │   │   │   ├── point_1_002.txt
@@ -244,16 +243,20 @@ But as you can see, pretrained weight trained on Market1501 dataset (suited for 
 │   │   ├── ...
 │   │   └── ...
 └── └── README.md
-
 ```
 
 Note, ```point_a``` and ```point_b``` are physically differernt marking points, while ```point_a_00x.jpeg``` and ```point_a_00y.jpeg``` are the same physical marking points, captured from different frames. I created this dataset using the following annotation tool:
 
 ```
-python annotation_tool_for_avm_deepsort.py --trial trial_A --resume 0 --crop 30
+python annotation_tool_for_avm_deepsort.py --trial trial_A --crop 20
 ```
 
-**Disclaimer:** I have to clear out some unused functions and codes. Work in progress. 
+If you want to generate a new cropped dataset with different ```bb_size```, use:
+
+```
+python annotation_tool_for_avm_deepsort.py --crop-only --trial trial_A --crop 40 
+```
+
 
 ### Training siamese network with Triplet loss
 
@@ -278,4 +281,3 @@ python siamese_training.py --help
 >  --resize # default = 0 (no resizing)
 ```
 
-**Disclaimer:** I have to clear out some unused functions and codes. Work in progress. 

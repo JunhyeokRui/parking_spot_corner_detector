@@ -46,17 +46,38 @@ class after_corner_detection():
         
         self.corner_points = None
         self.pub_exact_box_position = rospy.Publisher('/exact_box_position', String, queue_size=10)
-        self.colors = [(0,255,255),(0,0,255), (255,255,255),(128,0,255),(255,128,0)]
+        self.point_colors = [(0,255,255),(0,0,255),(255,255,255),(128,0,255)]
+        self.line_colors = [(0,255,255),(0,0,255),(255,255,255),(128,0,255)]
         self.class_dict = {
             'outside':0,
             'inside':1,
-            'middle':2,
+            'outside_aux':2,
+            'inside_aux':3
         }
         self.max_line = max_line
         self.dot_threshold = dot_threshold
         self.dist_threshold = dist_threshold
         self.pad = pad
         self.max_dist = max_dist
+
+        self.inside_corner_points = []
+        self.inside_aux_corner_points = []
+        self.outside_corner_points = []
+        self.outside_aux_corner_points = []
+
+        self.inside_corner_points_length = []
+        self.inside_aux_corner_points_length = []
+        self.outside_corner_points_length = []
+        self.outside_aux_corner_points_length = []
+
+        self.in_cnt = 0
+        self.in_aux_cnt =0
+        self.out_cnt =0
+        self.out_aux_cnt =0
+
+        self.outside_pairs = dict()
+        self.n_outside_corner_pairs =0
+
 
     def make_binary_img(self, img):
         new_img = img.copy()
@@ -75,13 +96,13 @@ class after_corner_detection():
         return gray_img, new_img
 
 
-    def length_between_points(self,point1,point2):
+    def length(self,point1,point2):
         return np.linalg.norm(point1 - point2)**2
 
-    def angle_between_points(self,point1,point2):
+    def angle(self,point1,point2):
         return np.arctan((point1 - point2)[1]/(point1 - point2)[0])
 
-    def center_point(self,point1,point2):
+    def center(self,point1,point2):
         return (point1+point2)/2
 
     def draw_line(self,image,point1,point2,classes):
@@ -125,95 +146,6 @@ class after_corner_detection():
 
         return angle
 
-    def orth_angle_calc_with_hough(self,angle, direction, corner, hough, name):
-        if hough:
-            temp = self.img[corner[1]-self.pad: corner[1]+self.pad, corner[0]-self.pad: corner[0]+self.pad]
-
-            # img_canny = cv2.Canny(temp, 50,100)
-            gray_binary, color_binary = self.make_binary_img(temp)
-            cv2.imshow("binary image around {}".format(name),color_binary)
-            img_canny = cv2.Canny(color_binary, 50,100)
-            # cv2.imshow("canny image around {}".format(name),img_canny)
-            lines = cv2.HoughLinesP(img_canny, 1,np.pi/360,5, np.array([]), self.max_line, self.max_dist)
-            if lines is not None:
-                # contrast_img.save(os.path.join(new_path,this_class, '{}_high_contrast.jpeg'.format(this_image[:-5])))
-                print_img = temp.copy()
-                points = []
-                angles = []
-                distances = []
-                dot_products = []
-                for line in lines:
-                    for x1, y1, x2, y2 in line:
-                        points.append(((x1 + 0.0, y1 + 0.0), (x2 + 0.0, y2 + 0.0)))
-                        cv2.line(print_img, (x1, y1), (x2, y2), (255, 0, 0), 1)
-                        orig_vec = np.array([np.cos(angle),np.sin(angle)])
-                        this_angle = self.angle_between_points(np.array([x1,y1]),np.array([x2,y2]))
-                        orth_vec = np.array([np.cos(this_angle), np.sin(this_angle)])
-                        prod = np.abs(np.matmul(orth_vec, orig_vec))
-                        dot_products.append(prod)
-                        angles.append(this_angle)
-                        distances.append(min(self.length_between_points(np.array([x1,y1]), np.array([temp.shape[0]//2,temp.shape[1]//2]) ),self.length_between_points(np.array([x2,y2]), np.array([temp.shape[0]//2,temp.shape[1]//2]) )))
-
-                dot_products = np.array(dot_products)
-                angles = np.array(angles)
-                distances = np.array(distances)
-                cv2.imshow("hough lines around {}".format(name),print_img)
-                # dot_thresholding = lambda x: 10e6 if x>self.dot_threshold else x
-                # distance_thresholding = lambda x: 10e6 if x>self.dist_threshold else x
-
-                # print(dot_products)
-                # dot_products = np.array(list(map(dot_thresholding, dot_products)))
-                # print(dot_products)
-                # distances = np.array(list(map(distance_thresholding,distances)))
-                
-                # print(dot_products)
-                index = np.argmin(1*dot_products + 0.01*distances)
-                print(dot_products[index])
-                print(distances[index])
-                if dot_products[index] < self.dot_threshold and distances[index] <self.dist_threshold:
-                # selected_angle = None
-                # for jj, hough_angle in enumerate(angles):
-
-                    # if np.abs(np.matmul(orth_vec, orig_vec))<self.dot_threshold and distances[jj] < self.dist_threshold :
-                    selected_angle = angles[index]
-                else:
-                    selected_angle = None
-
-                if selected_angle is not None:
-                    # print(min_matmul)
-                    orth_angle = selected_angle
-                    print("{}: HOUGH SLOPE IS USED!!\n".format(name))
-                    # print(lines)
-                    # print(final_index)
-                    # print((lines[final_index][0]))
-                    # cv2.line(print_img, (lines[final_index][0][0],lines[final_index][0][1]), (lines[final_index][0][2], lines[final_index][0][3]), (255, 255, 0), 10)
-                else:
-                    print("{}: There are no hough lines that are orthogonal enough. Assuming Strictly Orthogonal Relationship!\n".format(name))
-                    orth_angle = angle + np.pi/2
-            else:
-                print("{}: No hough lines are found. Assuming Strictly Orthogonal Relationship!\n".format(name))
-                orth_angle = angle + np.pi/2
-
-
-        else:
-            orth_angle = angle + np.pi/2
-
-        if direction == 'up':
-            if np.sin(orth_angle)<0:
-                orth_angle = orth_angle - np.pi
-        elif direction == 'down':
-            if np.sin(orth_angle)>0:
-                orth_angle = orth_angle - np.pi
-        elif direction == 'left':
-            if np.cos(orth_angle)<0:
-                orth_angle = orth_angle - np.pi
-        elif direction == 'right':
-            if np.cos(orth_angle)>0:
-                orth_angle = orth_angle - np.pi
-
-        return orth_angle
-
-
     def orth_opposite_point_calc(self, point1, point2, orth_angle, length = 95):
         orth_unit_vec = np.array([np.cos(orth_angle), np.sin(orth_angle)])
         orth_point1 = tuple(list(map(int,point1 - length*orth_unit_vec)))
@@ -227,136 +159,83 @@ class after_corner_detection():
 
         return np.dot(vec1,vec2)
 
+    def init_analyze(corner_points):
+        for i in range(corner_points.shape[0]):
+            cv2.circle(circle_img, (corner_points[i][1], corner_points[i][2]), 3, self.colors[corner_points[i][0]], -1)
+            cv2.circle(blank_image, (corner_points[i][1], corner_points[i][2]), 3, self.colors[corner_points[i][0]], -1)
 
+            if corner_points[i][0]==0:
+                if corner_points[i][2]>200:
+                    self.outside_corner_points.append(np.array([corner_points[i][1], corner_points[i][2]]))
+                    self.outside_corner_points_length.append((200-corner_points[i][1])**2 + (200-self.corner_points[i][2])**2)
+                    self.out_cnt +=1 
+            elif corner_points[i][0]==1:
+                if corner_points[i][2]>200:
+                    self.inside_corner_points.append(np.array((corner_points[i][1], corner_points[i][2])))
+                    self.inside_corner_points_length.append((200-corner_points[i][1])**2 + (200-corner_points[i][2])**2)
+                    self.in_cnt +=1
+            elif corner_points[i][0]==2:
+                if corner_points[i][2]>200:
+                    self.inside_aux_corner_points.append(np.array((corner_points[i][1], corner_points[i][2])))
+                    self.inside_aux_corner_points_length.append((200-corner_points[i][1])**2 + (200-corner_points[i][2])**2)
+                    self.in_aux_cnt +=1
+            elif corner_points[i][0]==3:
+                if corner_points[i][2]>200:
+                    self.outside_aux_corner_points.append(np.array((corner_points[i][1], corner_points[i][2])))
+                    self.outside_aux_corner_points_length.append((200-corner_points[i][1])**2 + (200-corner_points[i][2])**2)
+                    self.out_aux_cnt +=1
+
+    def find_pairs(which_corner_points):
+        nn=0
+        which_pairs = dict()
+        which_pair_closest_to_center = 10e8
+
+        for i in range(len(which_corner_points)):
+            for j in range(len(which_corner_points)):
+                if not i<j:
+                    if self.length(which_corner_points[i],which_corner_points[j])<3000 and self.length(which_corner_points[i],which_corner_points[j])>1000:
+                        nn+=1 
+                        which_pairs[nn] = dict()
+                        which_pairs[nn]['corner1'] = which_corner_points[i]
+                        which_pairs[nn]['corner2'] = which_corner_points[j]
+                        which_pairs[nn]['length'] = self.length(which_corner_points[i],which_corner_points[j])
+                        which_pairs[nn]['angle'] = self.angle(which_corner_points[i],which_corner_points[j])
+                        which_pairs[nn]['center_point'] = self.center(which_corner_points[i],which_corner_points[j])
+                        which_pairs[nn]['distance_from_center'] = self.length(which_pairs[nn]['center_point'],np.array([200,200]))
+                        if which_pairs[nn]['distance_from_center'] < which_pair_closest_to_center:
+                            which_pair_closest_to_center = which_pairs[nn]['distance_from_center']
+                            which_pairs['closest_pair_index'] = nn 
+        return which_pairs, nn, which_pair_closest_to_center
+
+                    
+                    
     def AVM_callback(self, msg):
-        # print("Received an image!")
-        # try:
-            # Convert your ROS Image message to OpenCV2
-        # print(msg)
-        # t0 = time.time()
         self.img = np.frombuffer(msg.data, dtype=np.uint8).reshape(msg.height, msg.width, -1)
-        # t1 = time.time()
-
-        # print('time per detection : {:.5f}'.format(t1-t0))
         circle_img = self.img.copy()
         blank_image = np.zeros(self.img.shape, np.uint8)
-        # print(self.img.shape)
         cv2.circle(blank_image,(200,200), 5, (0,255,255), -1)
 
-        inside_corner_points = []
-        inside_aux_corner_points = []
-        outside_corner_points = []
-        outside_aux_corner_points = []
+        init_analyze(self.corner_points)
 
-        inside_corner_points_length = []
-        inside_aux_corner_points_length = []
-        outside_corner_points_length = []
-        outside_aux_corner_points_length = []
-
-        in_cnt = 0
-        in_aux_cnt =0
-        out_cnt =0
-        out_aux_cnt =0
+        outside_pairs, n_outside_corner_pairs, outside_pair_closest_to_center = find_pairs(self.outside_corner_points)
+        inside_pairs, n_inside_corner_pairs, inside_pair_closest_to_center = find_pairs(self.inside_corner_points)
 
 
-        for i in range(self.corner_points.shape[0]):
-            cv2.circle(circle_img, (self.corner_points[i][1], self.corner_points[i][2]), 3, self.colors[self.corner_points[i][0]], -1)
-            cv2.circle(blank_image, (self.corner_points[i][1], self.corner_points[i][2]), 3, self.colors[self.corner_points[i][0]], -1)
-
-            if self.corner_points[i][0]==0:
-                if self.corner_points[i][2]>200:
-                    outside_corner_points.append(np.array([self.corner_points[i][1], self.corner_points[i][2]]))
-                    outside_corner_points_length.append((200-self.corner_points[i][1])**2 + (200-self.corner_points[i][2])**2)
-                    out_cnt +=1 
-            elif self.corner_points[i][0]==1:
-                if self.corner_points[i][2]>200:
-                    inside_corner_points.append(np.array((self.corner_points[i][1], self.corner_points[i][2])))
-                    inside_corner_points_length.append((200-self.corner_points[i][1])**2 + (200-self.corner_points[i][2])**2)
-                    in_cnt +=1
-            elif self.corner_points[i][0]==2:
-                if self.corner_points[i][2]>200:
-                    inside_aux_corner_points.append(np.array((self.corner_points[i][1], self.corner_points[i][2])))
-                    inside_aux_corner_points_length.append((200-self.corner_points[i][1])**2 + (200-self.corner_points[i][2])**2)
-                    in_aux_cnt +=1
-            elif self.corner_points[i][0]==3:
-                if self.corner_points[i][2]>200:
-                    outside_aux_corner_points.append(np.array((self.corner_points[i][1], self.corner_points[i][2])))
-                    outside_aux_corner_points_length.append((200-self.corner_points[i][1])**2 + (200-self.corner_points[i][2])**2)
-                    out_aux_cnt +=1
-
-        outside_pairs = dict()
-        n_outside_corner_pairs =0
-        outside_pair_closest_to_center = 10e8
-
-        for i in range(len(outside_corner_points)):
-            for j in range(len(outside_corner_points)):
-                if not i<j:
-                    if self.length_between_points(outside_corner_points[i],outside_corner_points[j])<3000 and self.length_between_points(outside_corner_points[i],outside_corner_points[j])>1000:
-                        n_outside_corner_pairs+=1 
-                        outside_pairs[n_outside_corner_pairs] = dict()
-                        outside_pairs[n_outside_corner_pairs]['corner1'] = outside_corner_points[i]
-                        outside_pairs[n_outside_corner_pairs]['corner2'] = outside_corner_points[j]
-                        outside_pairs[n_outside_corner_pairs]['length'] = self.length_between_points(outside_corner_points[i],outside_corner_points[j])
-                        outside_pairs[n_outside_corner_pairs]['angle'] = self.angle_between_points(outside_corner_points[i],outside_corner_points[j])
-                        outside_pairs[n_outside_corner_pairs]['center_point'] = self.center_point(outside_corner_points[i],outside_corner_points[j])
-                        outside_pairs[n_outside_corner_pairs]['distance_from_center'] = self.length_between_points(outside_pairs[n_outside_corner_pairs]['center_point'],np.array([200,200]))
-                        if outside_pairs[n_outside_corner_pairs]['distance_from_center'] < outside_pair_closest_to_center:
-                            outside_pair_closest_to_center = outside_pairs[n_outside_corner_pairs]['distance_from_center']
-                            outside_pairs['closest_pair_index'] = n_outside_corner_pairs 
-
-                    # self.draw_line(blank_image, outside_corner_points[i], outside_corner_points[j], 'outside')
-
-        inside_pairs = dict()
-        n_inside_corner_pairs =0
-        inside_pair_closest_to_center = 10e8
-        for i in range(len(inside_corner_points)):
-            for j in range(len(inside_corner_points)):
-                if i<j:
-                    if self.length_between_points(inside_corner_points[i],inside_corner_points[j])<3000 and self.length_between_points(inside_corner_points[i],inside_corner_points[j])>1000:
-                        n_inside_corner_pairs+=1 
-                        inside_pairs[n_inside_corner_pairs] = dict()
-                        inside_pairs[n_inside_corner_pairs]['corner1'] = inside_corner_points[i]
-                        inside_pairs[n_inside_corner_pairs]['corner2'] = inside_corner_points[j]
-                        inside_pairs[n_inside_corner_pairs]['length'] = self.length_between_points(inside_corner_points[i],inside_corner_points[j])
-                        inside_pairs[n_inside_corner_pairs]['angle'] = self.angle_between_points(inside_corner_points[i],inside_corner_points[j])
-                        inside_pairs[n_inside_corner_pairs]['center_point'] = self.center_point(inside_corner_points[i],inside_corner_points[j])
-                        inside_pairs[n_inside_corner_pairs]['distance_from_center'] = self.length_between_points(inside_pairs[n_inside_corner_pairs]['center_point'],np.array([200,200]))
-                        if inside_pairs[n_inside_corner_pairs]['distance_from_center'] < inside_pair_closest_to_center:
-                            inside_pair_closest_to_center = inside_pairs[n_inside_corner_pairs]['distance_from_center']
-                            inside_pairs['closest_pair_index'] = n_inside_corner_pairs 
-                    # self.draw_line(blank_image, inside_corner_points[i], inside_corner_points[j], 'inside')
-                    # print('inside line length : {}'.format(inside_pairs[n_inside_corner_pairs]['length']))
-        outside_pairs = dict()
-        n_outside_corner_pairs =0
-        outside_pair_closest_to_center = 10e8
-
-        for i in range(len(outside_corner_points)):
-            for j in range(len(outside_corner_points)):
-                if not i<j:
-                    if self.length_between_points(outside_corner_points[i],outside_corner_points[j])<3000 and self.length_between_points(outside_corner_points[i],outside_corner_points[j])>1000:
-                        n_outside_corner_pairs+=1 
-                        outside_pairs[n_outside_corner_pairs] = dict()
-                        outside_pairs[n_outside_corner_pairs]['corner1'] = outside_corner_points[i]
-                        outside_pairs[n_outside_corner_pairs]['corner2'] = outside_corner_points[j]
-                        outside_pairs[n_outside_corner_pairs]['length'] = self.length_between_points(outside_corner_points[i],outside_corner_points[j])
-                        outside_pairs[n_outside_corner_pairs]['angle'] = self.angle_between_points(outside_corner_points[i],outside_corner_points[j])
-                        outside_pairs[n_outside_corner_pairs]['center_point'] = self.center_point(outside_corner_points[i],outside_corner_points[j])
-                        outside_pairs[n_outside_corner_pairs]['distance_from_center'] = self.length_between_points(outside_pairs[n_outside_corner_pairs]['center_point'],np.array([200,200]))
-                        if outside_pairs[n_outside_corner_pairs]['distance_from_center'] < outside_pair_closest_to_center:
-                            outside_pair_closest_to_center = outside_pairs[n_outside_corner_pairs]['distance_from_center']
-                            outside_pairs['closest_pair_index'] = n_outside_corner_pairs 
-
-                    # self.draw_line(blank_image, outside_corner_points[i], outside_corner_points[j], 'outside')
-
-        print("inside_pair {} / outside_pair {} / inside_corner {} / outside_corner {} / in_aux {} / out_aux {}".format(n_inside_corner_pairs, n_outside_corner_pairs, in_cnt, out_cnt, in_aux_cnt, out_aux_cnt))
-        if n_inside_corner_pairs>0 and n_outside_corner_pairs ==0:   # if inside (back) corner pair is detected without any outside (front) corner pair, 
+        print("inside_pair {} / outside_pair {} / inside_corner {} / outside_corner {} / in_aux {} / out_aux {}".format(n_inside_corner_pairs, n_outside_corner_pairs, self.in_cnt, self.out_cnt, self.in_aux_cnt, self.out_aux_cnt))
+        
+        
+        
+        
+        #################### if inside (back) corner pair is detected without any outside (front) corner pair, 
+            
+        if n_inside_corner_pairs>0 and n_outside_corner_pairs ==0:   
             
             inside_pair_idx = inside_pairs['closest_pair_index']   # first get the closest inside pair from the center.
-            if out_cnt ==1 :  # if there is "single" outside corner 
-                if abs(self.unit_vector_mul(inside_pairs[inside_pair_idx]['angle'], self.angle_between_points(outside_corner_points[0], inside_pairs[inside_pair_idx]['corner1'])))<0.2:   # and if that single outside-corner and inside-[corner1] is orthogonal to the slope of original inside pair,
+            if self.out_cnt ==1 :  # if there is "single" outside corner 
+                if abs(self.unit_vector_mul(inside_pairs[inside_pair_idx]['angle'], self.angle(self.outside_corner_points[0], inside_pairs[inside_pair_idx]['corner1'])))<0.2:   # and if that single outside-corner and inside-[corner1] is orthogonal to the slope of original inside pair,
                     match_idx = 'corner1'
                     non_match_idx = 'corner2'
-                elif abs(self.unit_vector_mul(inside_pairs[inside_pair_idx]['angle'], self.angle_between_points(outside_corner_points[0], inside_pairs[inside_pair_idx]['corner2'])))<0.2:  # or if that single outside-corner and inside-[corner1] is orthogonal to the slope of original inside pair,
+                elif abs(self.unit_vector_mul(inside_pairs[inside_pair_idx]['angle'], self.angle(self.outside_corner_points[0], inside_pairs[inside_pair_idx]['corner2'])))<0.2:  # or if that single outside-corner and inside-[corner1] is orthogonal to the slope of original inside pair,
                     match_idx = 'corner2'
                     non_match_idx = 'corner1'    # store the index of matching corners. 
                 else:   # If none of them is orthogonal, there's no matching index. s
@@ -364,52 +243,49 @@ class after_corner_detection():
 
                 if match_idx is not None:  # If there's a matching index,  draw lines, assuming parallelogram relationship. 
                     self.draw_line([blank_image, circle_img], inside_pairs[inside_pair_idx]['corner1'], inside_pairs[inside_pair_idx]['corner2'], 'inside')
-                    self.draw_line([blank_image, circle_img], outside_corner_points[0], inside_pairs[inside_pair_idx][match_idx], 'middle')
+                    self.draw_line([blank_image, circle_img], self.outside_corner_points[0], inside_pairs[inside_pair_idx][match_idx], 'middle')
 
                     if in_aux_cnt >0:
                         _min_matmul = 10e6
                         for in_aux_idx in range(in_aux_cnt):
-                            _matmul = abs(self.unit_vector_mul(inside_pairs[inside_pair_idx]['angle'], self.angle_between_points(inside_aux_corner_points[in_aux_idx], inside_pairs[inside_pair_idx][non_match_idx])))
+                            _matmul = abs(self.unit_vector_mul(inside_pairs[inside_pair_idx]['angle'], self.angle(inside_aux_corner_points[in_aux_idx], inside_pairs[inside_pair_idx][non_match_idx])))
                             if _min_matmul > _matmul:
                                 _min_matmul = _matmul
                                 matching_aux_idx = in_aux_idx
                         if _min_matmul > 0.2:
                             matching_aux_idx = None
 
-                        temp_angle = self.angle_between_points(inside_aux_corner_points[matching_aux_idx], inside_pairs[inside_pair_idx][non_match_idx])
+                        temp_angle = self.angle(self.inside_aux_corner_points[matching_aux_idx], inside_pairs[inside_pair_idx][non_match_idx])
                         temp_angle = self.angle_converter (temp_angle, 'up')
-                        temp_point,_ = self.orth_opposite_point_calc(inside_pairs[inside_pair_idx][non_match_idx],inside_pairs[inside_pair_idx][non_match_idx],temp_angle,np.sqrt(self.length_between_points(outside_corner_points[0], inside_pairs[inside_pair_idx][match_idx])))
+                        temp_point,_ = self.orth_opposite_point_calc(inside_pairs[inside_pair_idx][non_match_idx],inside_pairs[inside_pair_idx][non_match_idx],temp_angle,np.sqrt(self.length(self.outside_corner_points[0], inside_pairs[inside_pair_idx][match_idx])))
 
                     if in_aux_cnt ==0 or matching_aux_idx is None:
-                        temp_angle = self.angle_between_points(outside_corner_points[0], inside_pairs[inside_pair_idx][match_idx])
+                        temp_angle = self.angle(self.outside_corner_points[0], inside_pairs[inside_pair_idx][match_idx])
                         temp_angle = self.angle_converter (temp_angle, 'up')
-                        temp_point,_ = self.orth_opposite_point_calc(inside_pairs[inside_pair_idx][non_match_idx],inside_pairs[inside_pair_idx][non_match_idx],temp_angle,np.sqrt(self.length_between_points(outside_corner_points[0], inside_pairs[inside_pair_idx][match_idx])))
+                        temp_point,_ = self.orth_opposite_point_calc(inside_pairs[inside_pair_idx][non_match_idx],inside_pairs[inside_pair_idx][non_match_idx],temp_angle,np.sqrt(self.length(outside_corner_points[0], inside_pairs[inside_pair_idx][match_idx])))
 
                     self.draw_line([blank_image, circle_img], temp_point, inside_pairs[inside_pair_idx][non_match_idx], 'middle')
-                    self.draw_line([blank_image, circle_img], temp_point, outside_corner_points[0], 'outside')
+                    self.draw_line([blank_image, circle_img], temp_point, self.outside_corner_points[0], 'outside')
 
-            if out_cnt ==0 or match_idx is None:   # If there's no outside corner points at all, or if there's no matching index, 
+            if self.out_cnt ==0 or match_idx is None:   # If there's no outside corner points at all, or if there's no matching index, 
                 
                 matching_aux_idx_corner1 = None
                 matching_aux_idx_corner2 = None
 
-                if in_aux_cnt >0:
+                if self.in_aux_cnt >0:
                     _min_matmul_corner1 = 10e6
                     _min_matmul_corner2 = 10e6
-                    for in_aux_idx in range(in_aux_cnt):
-                        _matmul_corner1 = abs(self.unit_vector_mul(inside_pairs[inside_pair_idx]['angle'], self.angle_between_points(inside_aux_corner_points[in_aux_idx], inside_pairs[inside_pair_idx]['corner1'])))
-                        _matmul_corner2 = abs(self.unit_vector_mul(inside_pairs[inside_pair_idx]['angle'], self.angle_between_points(inside_aux_corner_points[in_aux_idx], inside_pairs[inside_pair_idx]['corner2'])))
+                    for in_aux_idx in range(self.in_aux_cnt):
+                        _matmul_corner1 = abs(self.unit_vector_mul(inside_pairs[inside_pair_idx]['angle'], self.angle(self.inside_aux_corner_points[in_aux_idx], inside_pairs[inside_pair_idx]['corner1'])))
+                        _matmul_corner2 = abs(self.unit_vector_mul(inside_pairs[inside_pair_idx]['angle'], self.angle(self.inside_aux_corner_points[in_aux_idx], inside_pairs[inside_pair_idx]['corner2'])))
                         if _min_matmul_corner1 > _matmul_corner1:
                             _min_matmul_corner1 = _matmul_corner1
                             matching_aux_idx_corner1 = in_aux_idx
-                            _dist_corner1 = self.length_between_points(inside_aux_corner_points[in_aux_idx], inside_pairs[inside_pair_idx]['corner1'])
+                            _dist_corner1 = self.length(self.inside_aux_corner_points[in_aux_idx], inside_pairs[inside_pair_idx]['corner1'])
                         if _min_matmul_corner2 > _matmul_corner2:
                             _min_matmul_corner2 = _matmul_corner2
                             matching_aux_idx_corner2 = in_aux_idx
-                            _dist_corner2 = self.length_between_points(inside_aux_corner_points[in_aux_idx], inside_pairs[inside_pair_idx]['corner2'])
-                    print('here')
-                    print(_dist_corner1)
-                    print(_dist_corner2)
+                            _dist_corner2 = self.length(self.inside_aux_corner_points[in_aux_idx], inside_pairs[inside_pair_idx]['corner2'])
 
                     if _min_matmul_corner1 > 0.2 or _dist_corner1 < 1500:
                         matching_aux_idx_corner1 = None
@@ -420,13 +296,13 @@ class after_corner_detection():
                 if matching_aux_idx_corner1 is None:
                     orth_angle_1 = self.orth_angle_calc_with_hough(inside_pairs[inside_pair_idx]['angle'], 'up', inside_pairs[inside_pair_idx]['corner1'], opt.hough,'corner1')
                 else:
-                    temp_angle = self.angle_between_points(inside_aux_corner_points[matching_aux_idx_corner1], inside_pairs[inside_pair_idx]['corner1'])
+                    temp_angle = self.angle(self.inside_aux_corner_points[matching_aux_idx_corner1], inside_pairs[inside_pair_idx]['corner1'])
                     orth_angle_1 = self.angle_converter (temp_angle, 'up')
 
                 if matching_aux_idx_corner2 is None:
                     orth_angle_2 = self.orth_angle_calc_with_hough(inside_pairs[inside_pair_idx]['angle'], 'up', inside_pairs[inside_pair_idx]['corner2'], opt.hough,'corner2')
                 else:
-                    temp_angle = self.angle_between_points(inside_aux_corner_points[matching_aux_idx_corner2], inside_pairs[inside_pair_idx]['corner2'])
+                    temp_angle = self.angle(self.inside_aux_corner_points[matching_aux_idx_corner2], inside_pairs[inside_pair_idx]['corner2'])
                     orth_angle_2 = self.angle_converter (temp_angle, 'up')
 
                 orth_opposite_1, _ = self.orth_opposite_point_calc(inside_pairs[inside_pair_idx]['corner1'], inside_pairs[inside_pair_idx]['corner2'], orth_angle_1)
@@ -444,13 +320,11 @@ class after_corner_detection():
 
             outside_pair_idx = outside_pairs['closest_pair_index']
 
-            if in_cnt ==1 :
-                # print(abs(self.unit_vector_mul(inside_pairs[n_inside_corner_pairs]['angle'], self.angle_between_points(outside_corner_points[0], inside_pairs[n_inside_corner_pairs]['corner1']))))
-                # print(abs(self.unit_vector_mul(inside_pairs[n_inside_corner_pairs]['angle'], self.angle_between_points(outside_corner_points[0], inside_pairs[n_inside_corner_pairs]['corner2']))))
-                if abs(self.unit_vector_mul(outside_pairs[outside_pair_idx]['angle'], self.angle_between_points(inside_corner_points[0], outside_pairs[outside_pair_idx]['corner1'])))<0.1:
+            if self.in_cnt ==1 :
+                if abs(self.unit_vector_mul(outside_pairs[outside_pair_idx]['angle'], self.angle(self.inside_corner_points[0], outside_pairs[outside_pair_idx]['corner1'])))<0.1:
                     match_idx = 'corner1'
                     non_match_idx = 'corner2'
-                elif abs(self.unit_vector_mul(outside_pairs[outside_pair_idx]['angle'], self.angle_between_points(inside_corner_points[0], outside_pairs[outside_pair_idx]['corner2'])))<0.1:
+                elif abs(self.unit_vector_mul(outside_pairs[outside_pair_idx]['angle'], self.angle(self.inside_corner_points[0], outside_pairs[outside_pair_idx]['corner2'])))<0.1:
                     match_idx = 'corner2'
                     non_match_idx = 'corner1'
                 else:
@@ -458,19 +332,19 @@ class after_corner_detection():
 
                 if match_idx is not None:
                     self.draw_line([blank_image, circle_img], outside_pairs[outside_pair_idx]['corner1'], outside_pairs[outside_pair_idx]['corner2'], 'outside')
-                    self.draw_line([blank_image, circle_img], inside_corner_points[0], outside_pairs[outside_pair_idx][match_idx], 'middle')
-                    temp_angle = self.angle_between_points(inside_corner_points[0], outside_pairs[outside_pair_idx][match_idx])
+                    self.draw_line([blank_image, circle_img], self.inside_corner_points[0], outside_pairs[outside_pair_idx][match_idx], 'middle')
+                    temp_angle = self.angle(self.inside_corner_points[0], outside_pairs[outside_pair_idx][match_idx])
                     temp_angle = self.angle_converter (temp_angle, 'down')
-                    temp_point,_ = self.orth_opposite_point_calc(outside_pairs[outside_pair_idx][non_match_idx],outside_pairs[outside_pair_idx][non_match_idx],temp_angle,np.sqrt(self.length_between_points(inside_corner_points[0], outside_pairs[outside_pair_idx][match_idx])))
+                    temp_point,_ = self.orth_opposite_point_calc(outside_pairs[outside_pair_idx][non_match_idx],outside_pairs[outside_pair_idx][non_match_idx],temp_angle,np.sqrt(self.length(self.inside_corner_points[0], outside_pairs[outside_pair_idx][match_idx])))
                         
                     self.draw_line([blank_image, circle_img], temp_point, outside_pairs[outside_pair_idx][non_match_idx], 'middle')
-                    self.draw_line([blank_image, circle_img], temp_point, inside_corner_points[0], 'inside')
+                    self.draw_line([blank_image, circle_img], temp_point, self.inside_corner_points[0], 'inside')
 
                 # print(match_idx)
 
-            if in_cnt ==0 or match_idx is None:
+            if self.in_cnt ==0 or match_idx is None:
 
-                if abs(np.cos(self.angle_between_points(outside_pairs[outside_pair_idx]['corner1'],outside_pairs[outside_pair_idx]['corner2'])))<0.1:
+                if abs(np.cos(self.angle(outside_pairs[outside_pair_idx]['corner1'],outside_pairs[outside_pair_idx]['corner2'])))<0.1:
                     if outside_pairs[outside_pair_idx]['corner1'][0]>200 and outside_pairs[outside_pair_idx]['corner2'][0]>200:
                         orth_angle_1 = self.orth_angle_calc_with_hough(outside_pairs[outside_pair_idx]['angle'], 'right', outside_pairs[outside_pair_idx]['corner1'], opt.hough,'corner1')
                         orth_angle_2 = self.orth_angle_calc_with_hough(outside_pairs[outside_pair_idx]['angle'], 'right', outside_pairs[outside_pair_idx]['corner2'], opt.hough,'corner2')
@@ -491,13 +365,14 @@ class after_corner_detection():
                 self.draw_line([blank_image, circle_img], orth_opposite_1, outside_pairs[outside_pair_idx]['corner1'], 'middle')
                 self.draw_line([blank_image, circle_img], orth_opposite_2, outside_pairs[outside_pair_idx]['corner2'], 'middle')
 
+                
+                
         if n_outside_corner_pairs>0 and n_inside_corner_pairs >0:
 
             outside_pair_idx = outside_pairs['closest_pair_index']
             inside_pair_idx = inside_pairs['closest_pair_index']
-            # print(abs(self.unit_vector_mul(inside_pairs[inside_pair_idx]['angle'],self.angle_between_points(inside_pairs[inside_pair_idx]['center_point'],outside_pairs[outside_pair_idx]['center_point']))))
-            if abs(self.unit_vector_mul(outside_pairs[outside_pair_idx]['angle'],self.angle_between_points(inside_pairs[inside_pair_idx]['center_point'],outside_pairs[outside_pair_idx]['center_point'])))<0.1:
-                if abs(self.unit_vector_mul(self.angle_between_points(outside_pairs[outside_pair_idx]['corner1'],inside_pairs[inside_pair_idx]['corner1']), self.angle_between_points(outside_pairs[outside_pair_idx]['corner2'],inside_pairs[inside_pair_idx]['corner2'])) -1 )<0.01:
+            if abs(self.unit_vector_mul(outside_pairs[outside_pair_idx]['angle'],self.angle(inside_pairs[inside_pair_idx]['center_point'],outside_pairs[outside_pair_idx]['center_point'])))<0.1:
+                if abs(self.unit_vector_mul(self.angle(outside_pairs[outside_pair_idx]['corner1'],inside_pairs[inside_pair_idx]['corner1']), self.angle(outside_pairs[outside_pair_idx]['corner2'],inside_pairs[inside_pair_idx]['corner2'])) -1 )<0.01:
                     pair_type = True
                 else:
                     pair_type = False
@@ -515,47 +390,41 @@ class after_corner_detection():
                     self.draw_line([blank_image, circle_img], outside_pairs[outside_pair_idx]['corner1'], inside_pairs[inside_pair_idx]['corner2'], 'middle')
             else:
                 that_one_outside_corner_idx = np.array(outside_corner_points_length).argsort()[0]
-                # print(abs(self.unit_vector_mul(inside_pairs[n_inside_corner_pairs]['angle'], self.angle_between_points(outside_corner_points[0], inside_pairs[n_inside_corner_pairs]['corner1']))))
-                # print(abs(self.unit_vector_mul(inside_pairs[n_inside_corner_pairs]['angle'], self.angle_between_points(outside_corner_points[0], inside_pairs[n_inside_corner_pairs]['corner2']))))
 
-                if abs(self.unit_vector_mul(inside_pairs[inside_pair_idx]['angle'], self.angle_between_points(outside_corner_points[that_one_outside_corner_idx], inside_pairs[inside_pair_idx]['corner1'])))<0.1:
+                if abs(self.unit_vector_mul(inside_pairs[inside_pair_idx]['angle'], self.angle(self.outside_corner_points[that_one_outside_corner_idx], inside_pairs[inside_pair_idx]['corner1'])))<0.1:
                     match_idx = 'corner1'
                     non_match_idx = 'corner2'
-                elif abs(self.unit_vector_mul(inside_pairs[inside_pair_idx]['angle'], self.angle_between_points(outside_corner_points[that_one_outside_corner_idx], inside_pairs[inside_pair_idx]['corner2'])))<0.1:
+                elif abs(self.unit_vector_mul(inside_pairs[inside_pair_idx]['angle'], self.angle(self.outside_corner_points[that_one_outside_corner_idx], inside_pairs[inside_pair_idx]['corner2'])))<0.1:
                     match_idx = 'corner2'
                     non_match_idx = 'corner1'
                 else:
                     match_idx = None
-                # print(match_idx)
 
                 if match_idx is not None:
                     self.draw_line([blank_image, circle_img], inside_pairs[inside_pair_idx]['corner1'], inside_pairs[inside_pair_idx]['corner2'], 'inside')
                     self.draw_line([blank_image, circle_img], outside_corner_points[that_one_outside_corner_idx], inside_pairs[inside_pair_idx][match_idx], 'middle')
 
-                    if in_aux_cnt >0:
+                    if self.in_aux_cnt >0:
                         _min_matmul = 10e6
-                        for in_aux_idx in range(in_aux_cnt):
-                            _matmul = abs(self.unit_vector_mul(inside_pairs[inside_pair_idx]['angle'], self.angle_between_points(inside_aux_corner_points[in_aux_idx], inside_pairs[inside_pair_idx][non_match_idx])))
+                        for in_aux_idx in range(self.in_aux_cnt):
+                            _matmul = abs(self.unit_vector_mul(inside_pairs[inside_pair_idx]['angle'], self.angle(self.inside_aux_corner_points[in_aux_idx], inside_pairs[inside_pair_idx][non_match_idx])))
                             if _min_matmul > _matmul:
                                 _min_matmul = _matmul
                                 matching_aux_idx = in_aux_idx
                         if _min_matmul > 0.2:
                             matching_aux_idx = None
 
-                        temp_angle = self.angle_between_points(inside_aux_corner_points[matching_aux_idx], inside_pairs[inside_pair_idx][non_match_idx])
+                        temp_angle = self.angle(self.inside_aux_corner_points[matching_aux_idx], inside_pairs[inside_pair_idx][non_match_idx])
                         temp_angle = self.angle_converter (temp_angle, 'up')
-                        temp_point,_ = self.orth_opposite_point_calc(inside_pairs[inside_pair_idx][non_match_idx],inside_pairs[inside_pair_idx][non_match_idx],temp_angle,np.sqrt(self.length_between_points(outside_corner_points[that_one_outside_corner_idx], inside_pairs[inside_pair_idx][match_idx])))
+                        temp_point,_ = self.orth_opposite_point_calc(inside_pairs[inside_pair_idx][non_match_idx],inside_pairs[inside_pair_idx][non_match_idx],temp_angle,np.sqrt(self.length(self.outside_corner_points[that_one_outside_corner_idx], inside_pairs[inside_pair_idx][match_idx])))
 
-                    if in_aux_cnt ==0 or matching_aux_idx is None:
-                        temp_angle = self.angle_between_points(outside_corner_points[0], inside_pairs[inside_pair_idx][match_idx])
+                    if self.in_aux_cnt ==0 or matching_aux_idx is None:
+                        temp_angle = self.angle(self.outside_corner_points[0], inside_pairs[inside_pair_idx][match_idx])
                         temp_angle = self.angle_converter (temp_angle, 'up')
-                        temp_point,_ = self.orth_opposite_point_calc(inside_pairs[inside_pair_idx][non_match_idx],inside_pairs[inside_pair_idx][non_match_idx],temp_angle,np.sqrt(self.length_between_points(outside_corner_points[that_one_outside_corner_idx], inside_pairs[inside_pair_idx][match_idx])))
+                        temp_point,_ = self.orth_opposite_point_calc(inside_pairs[inside_pair_idx][non_match_idx],inside_pairs[inside_pair_idx][non_match_idx],temp_angle,np.sqrt(self.length(self.outside_corner_points[that_one_outside_corner_idx], inside_pairs[inside_pair_idx][match_idx])))
 
-                    # temp_angle = self.angle_between_points(outside_corner_points[that_one_outside_corner_idx], inside_pairs[inside_pair_idx][match_idx])
-                    # temp_angle = self.angle_converter (temp_angle, 'up')
-                    # temp_point,_ = self.orth_opposite_point_calc(inside_pairs[inside_pair_idx][non_match_idx],inside_pairs[inside_pair_idx][non_match_idx],temp_angle,np.sqrt(self.length_between_points(outside_corner_points[that_one_outside_corner_idx], inside_pairs[inside_pair_idx][match_idx])))
                     self.draw_line([blank_image, circle_img], temp_point, inside_pairs[inside_pair_idx][non_match_idx], 'middle')
-                    self.draw_line([blank_image, circle_img], temp_point, outside_corner_points[that_one_outside_corner_idx], 'outside')
+                    self.draw_line([blank_image, circle_img], temp_point, self.outside_corner_points[that_one_outside_corner_idx], 'outside')
 
 
         cv2.imshow("Center AVM", circle_img)
@@ -567,17 +436,9 @@ class after_corner_detection():
 
 
     def string_callback(self, msg):
-        # print("Received an image!")
-        # try:
-            # Convert your ROS Image message to OpenCV2
-        # print(msg)
         self.corner_points = np.array(self.string_to_numpy(msg.data)).reshape(-1,3)
-        # print(self.corner_points)
-
-
 
     def string_to_numpy(self,input_string):
-        
         return list(map(int, input_string.split(',')))
 
 

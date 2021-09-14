@@ -183,71 +183,21 @@ class yolo_for_ros():
             half=False,
             refinement = False):
 
-        # rospy.init_node('image_listener')
-        # # imgsaver=image_saver()
-        # # Define your image topic
-        # image_topic = "/fisheye_raw_rear"
-        # # Set up your subscriber and define its callback
-        # rospy.Subscriber(image_topic, Image, image_callback)
-        # # print(sub)
-        # # Spin until ctrl + c
-        # # print(imgs)
-        # rospy.spin()
-        # # print(imgsaver.image)
-        
-
-        # save_img = not nosave and not source.endswith('.txt')  # save inference images
-        # webcam = source.isnumeric() or source.endswith('.txt') or source.lower().startswith(
-        #     ('rtsp://', 'rtmp://', 'http://', 'https://'))
-
-        # # Directories
-        # save_dir = increment_path(Path(project) / name, exist_ok=exist_ok)  # increment run
-        # (save_dir / 'labels' if save_txt else save_dir).mkdir(parents=True, exist_ok=True)  # make dir
-
-        # Initialize
-        # set_logging()
-        # device = select_device(device)
-        # half &= device.type != 'cpu'  # half precision only supported on CUDA
-
-        # Load model
-
-        # Second-stage classifier
-        # classify = True
-        # if classify:
-        #     modelc = load_classifier(name='resnet50', n=2)  # initialize
-        #     modelc.load_state_dict(torch.load('resnet50.pt', map_location=device)['model']).to(device).eval()
-
-        # Dataloader
-        # if webcam:
-        #     view_img = check_imshow()
-        #     cudnn.benchmark = True  # set True to speed up constant image size inference
-        #     dataset = LoadStreams(source, img_size=imgsz, stride=stride)
-        #     bs = len(dataset)  # batch_size
-        # else:
-        #     dataset = LoadImages(source, img_size=imgsz, stride=stride)
-        #     bs = 1  # batch_size
-        # vid_path, vid_writer = [None] * bs, [None] * bs
-
-        # Run inference
-        # if device.type != 'cpu':
+ 
         self.model(torch.zeros(1, 3, imgsz, imgsz).to(device).type_as(next(self.model.parameters())))  # run once
         t0 = time.time()
-        # for path, img, im0s, vid_cap in dataset:
+
         im0 = input_img
         img = torch.from_numpy(input_img).to(device).unsqueeze(0)
         img = torch.transpose(img, 3,1)
         img = torch.transpose(img, 2,3)
-        # print(img)
         img = img.half() if half else img.float()  # uint8 to fp16/32
         img /= 255.0  # 0 - 255 to 0.0 - 81.0
         if img.ndimension() == 3:
             img = img.unsqueeze(0)
         img = img.cuda()
         img = T.Resize(imgsz)(img)
-        # print(img.shape)
-
         
-        # print(img.shape)
         # Inference
         t1 = time_synchronized()
         pred = self.model(img,
@@ -256,75 +206,38 @@ class yolo_for_ros():
         # Apply NMS
         pred = non_max_suppression(pred, conf_thres, iou_thres, classes, agnostic_nms, max_det=max_det)
         # print('this_is_prediction')
-        # print(pred)
+
         t2 = time_synchronized()
 
-        # Apply Classifier
-        # if classify:
-        #     pred = apply_classifier(pred, modelc, img, im0)
-
-        # Process detections
         for i, det in enumerate(pred):  # detections per image
-            # print(det)
-            # if webcam:  # batch_size >= 1
-            #     p, s, im0, frame = path[i], f'{i}: ', im0s[i].copy(), dataset.count
-            # else:
-            #     p, s, im0, frame = path, '', im0s.copy(), getattr(dataset, 'frame', 0)
 
-            # p = Path(p)  # to Path
-            # save_path = str(save_dir / p.name)  # img.jpg
-            # txt_path = str(save_dir / 'labels' / p.stem) + ('' if dataset.mode == 'image' else f'_{frame}')  # img.txt
-            # s += '%gx%g ' % img.shape[2:]  # print string
             gn = torch.tensor(img.shape)[[1, 0, 1, 0]]  # normalization gain whwh
             imc = img.copy() if save_crop else img  # for save_crop
             if len(det):
-                # Rescale boxes from img_size to im0 size
-                # print('before_resizing\n')
-                # print(det)
                 det[:, :4] = scale_coords(img.shape[2:], det[:, :4], im0.shape).round()
-                # print('after_resizing\n')
-                # print(det)
                 # Print results
                 for c in det[:, -1].unique():
                     n = (det[:, -1] == c).sum()  # detections per class
-                    # s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
-
-                # refined_pixel_estimations = []
 
                 
                 # Write results
                 refine_estimations = []
                 class_estimations = []
                 for *xyxy, conf, cls in reversed(det):
-                    # print(xyxy)
                     if save_txt:  # Write to file
                         xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
                         line = (cls, *xywh, conf) if save_conf else (cls, *xywh)  # label format
-                        # with open(txt_path + '.txt', 'a') as f:
-                        #     f.write(('%g ' * len(line)).rstrip() % line + '\n')
 
                     # if save_img or save_crop or view_img:  # Add bbox to image
                     c = int(cls)  # integer class
                     label = None if hide_labels else (self.names[c] if hide_conf else f'{self.names[c]} {conf:.2f}')
-                    # print('here')
-                    # print(xyxy)
                     center_point = plot_one_box(xyxy, im0, label=label, color=colors(c, True), line_thickness=line_thickness)
-                    # refine_estimation = plot_exact_point(self.resize, self.refinement_model,xyxy, im0, label=label, color=colors(c, True), line_thickness=line_thickness, refinement=self.refinement)
                     refine_estimations.append(np.array([c,center_point[0],center_point[1]]))
-                    # class_estimations.append(c)
-                    # print(center_point)
                 refine_estimations = np.concatenate(refine_estimations,0)
                 refine_estimations = ','.join(map(str,refine_estimations))
                 self.pub.publish(refine_estimations)
 
                 
-                    # self.pub.publish(refine_estimation)
-                    # if save_crop:
-                        # save_one_box(xyxy, imc, file=save_dir / 'crops' / names[c] / f'{p.stem}.jpg', BGR=True)
-
-            # Print time (inference + NMS)
-            # print(f'{s}Done. ({t2 - t1:.3f}s)')
-
             # Stream results
             if view_img:
                 if self.refinement :
@@ -334,33 +247,6 @@ class yolo_for_ros():
                 cv2.imshow(name,im0)
                 cv2.waitKey(1)  # 1 millisecond
 
-            # Save results (image with detections)
-            # if save_img:
-            #     if dataset.mode == 'image':
-            #         cv2.imwrite(save_path, im0)
-                # else:  # 'video' or 'stream'
-                #     if vid_path[i] != save_path:  # new video
-                #         vid_path[i] = save_path
-                #         if isinstance(vid_writer[i], cv2.VideoWriter):
-                #             vid_writer[i].release()  # release previous video writer
-                #         if vid_cap:  # video
-                #             fps = vid_cap.get(cv2.CAP_PROP_FPS)
-                #             w = int(vid_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-                #             h = int(vid_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-                #         else:  # stream
-                #             fps, w, h = 30, im0.shape[1], im0.shape[0]
-                #             save_path += '.mp4'
-                #         vid_writer[i] = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
-                #     vid_writer[i].write(im0)
-
-        # if save_txt or save_img:
-        #     s = f"\n{len(list(save_dir.glob('labels/*.txt')))} labels saved to {save_dir / 'labels'}" if save_txt else ''
-        #     print(f"Results saved to {save_dir}{s}")
-
-        # if update:
-        #     strip_optimizer(yolo_weight)  # update model (to fix SourceChangeWarning)
-
-        # print(f'Done. ({time.time() - t0:.3f}s)')
 
         t1 = time.time()
 
@@ -368,12 +254,7 @@ class yolo_for_ros():
 
     def listener(self):
         rospy.init_node('yolo_detector')
-        # Define your image topic
-        # Set up your subscriber and define its callback
         rospy.Subscriber("/AVM_center_image", Image, self.image_callback)
-        # rospy.Subscriber("/fisheye_raw_center", Image, self.image_front_callback)
-        # rospy.Subscriber("/fisheye_raw_front", Image, self.image_callback)
-        # rospy.Publisher()
         rospy.spin()
 
 
