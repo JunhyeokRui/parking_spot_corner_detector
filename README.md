@@ -139,7 +139,7 @@ https://user-images.githubusercontent.com/68195716/132684641-eb6b5b43-c573-4825-
 To create train / test / validation split based on parking episodes, you must run the following code. 
 
 ```
-python split_generator.py --train A,B,C --valid D,E --test F --dataset AVM_center_data --run split_ABC_DE_F.yaml
+python split_generator.py --train A,B,C --valid D,E --test F --dataset AVM_center_data --run split_ABC_DE_F
 ```
 
 This code automatically creates ```./data/split_ABC_DE_F.yaml``` file that is required for YOLO training. You can pass this split YAML file through python argument during training. 

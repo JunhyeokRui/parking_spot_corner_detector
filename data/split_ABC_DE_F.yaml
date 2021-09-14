@@ -1,0 +1,5 @@
+names: [out, in, aux_out, aux_in]
+nc: 4
+test: ./data/dyros/split_ABC_DE_F/valid.txt
+train: ./data/dyros/split_ABC_DE_F/train.txt
+val: ./data/dyros/split_ABC_DE_F/test.txt
