@@ -114,7 +114,7 @@ Checkout the [YOLOv5 code repository](https://github.com/ultralytics/yolov5) to 
 
 <!-- **Disclaimer:** Due to limitation of OpenCV's cursor-related function, only two classes can be differentiated per one execution: Left-click and Right-click. But I believe there's a better and clever solution that can mark all 4 classes at once using some kind of keyboard inputs alongside with mouse clicks!  -->
 ```
-python annotation_tool_for_avm.py --trial trial_D --img_size 500 --bb_size 20
+python annotation_tool_for_avm.py --trial trial_D --dataset AVM_center_400 --img_size 500 --bb_size 20
 ```
 Before clicking on the marking point, you should specify the type of the point by keyboard input. 
 
