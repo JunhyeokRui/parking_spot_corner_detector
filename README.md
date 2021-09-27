@@ -185,7 +185,7 @@ https://user-images.githubusercontent.com/68195716/132668170-fafce57b-352e-41f5-
 Using the detected marking points, PSDT-Net infers the position of parking slots. You can use 
 
 ```
-python ROS_inference.py --yolo_weight ./runs/train/EXPERIMENT_NAME_OF_YOUR_CHOICE/weights/last.pt --view-img
+python ROS_inference.py
 ```
 to see its results in real-time. Remember, you should run  ```ROS_detect_marking_points.py``` before you run the ```ROS_inference.py``` script. 
 
