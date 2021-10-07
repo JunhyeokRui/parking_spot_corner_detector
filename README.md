@@ -199,10 +199,10 @@ PSDT-Net uses DeepSORT to track different marking points. DeepSORT is a deep lea
 
 ### Run with pretrained weight
 
-Even with a pretrained feature extractor network, DeepSORT can quite robustly track multiple marking points. You can check the result with pretrained weights using the code below:
+(Using DeepSort)Even with a pretrained feature extractor network, DeepSORT can quite robustly track multiple marking points. You can check the result with pretrained weights using the code below:
 
 ```
-python ROS_track_marking_points.py --view-img
+python ROS_track_marking_points.py --yolo_weight ./runs/train/EXPERIMENT_NAME_OF_YOUR_CHOICE/weights/last.pt --view-img
 ```
 
 ### Create dataset for feature extractor
